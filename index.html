@@ -179,8 +179,6 @@ tbody tr.click:hover{background:#F4F8FA}
     <button data-v="fuera">Egresados y suspendidos <em id="n-fue"></em></button>
     <button data-v="descargas">Descargas</button>
   </div>
-  <label class="corte">Fecha de corte
-    <input type="date" id="corte" value="2026-09-04"></label>
   <div class="user"><div class="av">RS</div>
     <div class="who"><b>Ruth Silva</b><span id="quien">Gestión Humana</span></div>
     <button id="salir">Salir</button></div>
@@ -284,7 +282,8 @@ export const DB = {
 
 /* ---- núcleo de la aplicación ---- */
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
-let CORTE=new Date('2026-09-04T12:00:00');
+// Las edades se calculan siempre a la fecha de hoy (ya no hay fecha de corte fija)
+let CORTE=(()=>{const h=new Date();return new Date(h.getFullYear(),h.getMonth(),h.getDate(),12);})();
 let ENT={};                // entregas de la jornada en curso
 let CONST={};              // constancias de estudio marcadas
 let ANIO=new Date().getFullYear();
@@ -292,7 +291,7 @@ let JORNADAS={};
 let VISTA='trab', SEL=null;
 
 const edad=f=>{if(!f)return null;const d=new Date(f+'T12:00:00');let e=CORTE.getFullYear()-d.getFullYear();
-  const m=CORTE.getMonth()-d.getMonth();if(m<0||(m===0&&CORTE.getDate()<d.getDate()))e--;return e;};
+  const m=CORTE.getMonth()-d.getMonth();if(m<0||(m===0&&CORTE.getDate()<d.getDate()))e--;return Math.max(e,0);}; // nacido después del corte = 0 años (antes daba -1)
 const fdate=f=>f?f.split('-').reverse().join('/'):'—';
 const norm=s=>(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -574,7 +573,7 @@ function vFuera(){
 /* ---------- vista: descargas ---------- */
 function vDescargas(){
   main(`<div class="head"><div><h1>Descargas</h1>
-    <p class="sub">Las dos estructuras salen del mismo dato, con los encabezados que pide cada trámite. La edad se calcula a la fecha de corte, no queda congelada.</p></div></div>
+    <p class="sub">Las dos estructuras salen del mismo dato, con los encabezados que pide cada trámite. La edad se calcula a la fecha de hoy, no queda congelada.</p></div></div>
   <div class="dl">
     <article><h3>Estructura HCM</h3>
       <p>Una fila por persona. El titular repite su cédula y el grupo familiar se identifica por ella. Es el formato de la aseguradora.</p>
@@ -589,7 +588,7 @@ function vDescargas(){
       <p>Documentos, tallas y constancias que faltan, ordenados por trabajador.</p>
       <button class="btn" id="d3">Descargar</button></article>
   </div>
-  <p class="foot">Fecha de corte aplicada: ${CORTE.toLocaleDateString('es-VE')}. Cámbiela en el panel izquierdo y las edades se recalculan.</p>`);
+  <p class="foot">Las edades se calcularon a la fecha de hoy: ${CORTE.toLocaleDateString('es-VE')}.</p>`);
   $('#d1').onclick=()=>{
     const R=[];
     ACT().forEach(t=>{
@@ -1041,7 +1040,6 @@ function primeraCarga(){
 
 /* ---------- enlaces fijos ---------- */
 $$('.nav button').forEach(b=>b.onclick=()=>ir(b.dataset.v));
-$('#corte').onchange=e=>{ if(e.target.value){ CORTE=new Date(e.target.value+'T12:00:00'); render(); } };
 $('#salir').onclick=salir;
 $('#e-ok').onclick=entrar;
 $('#e-clave').onkeydown=e=>{ if(e.key==='Enter') entrar(); };
