@@ -185,7 +185,7 @@ $('#btn-cargar').addEventListener('click',async()=>{
   let hecho=0;const av=k=>{hecho+=k;$('#prog').style.width=Math.round(hecho/total*100)+'%';};
   try{
     if(S.previa){log('Quitando la copia anterior...');
-      for(const c of ['personal','personal_fotos','personal_movimientos','vac_vencidas','vac_solicitudes','vac_reposos','vac_nomina'])await vaciar(c);}
+      for(const c of ['personal','personal_fotos','personal_movimientos','vac_vencidas','vac_solicitudes','vac_reposos','vac_nomina','vac_config'])await vaciar(c);}
     log('Personal: fichas...');await escribir('personal',personal,300,av);
     log('Personal: fotos...');await escribir('personal_fotos',fotos,20,av);
     log('Personal: movimientos...');await escribir('personal_movimientos',movs,400,av);

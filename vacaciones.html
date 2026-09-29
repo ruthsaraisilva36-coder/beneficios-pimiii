@@ -1,0 +1,3413 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sistema de Vacaciones y Reposos — CVM PIM III</title>
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<!-- SheetJS para exportar Excel -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; color: #1a1a2e; }
+
+/* ── NAV ── */
+.nav { background: linear-gradient(135deg, #1F4E79, #2E75B6); color: white; padding: 0; display: flex; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,.15); position: sticky; top: 0; z-index: 100; }
+.nav-brand { padding: 12px 20px; font-weight: 700; font-size: 15px; border-right: 1px solid rgba(255,255,255,.2); display: flex; align-items: center; gap: 10px; }
+.nav-brand img { height: 28px; }
+.nav-tabs { display: flex; flex: 1; }
+.nav-tab { padding: 14px 22px; cursor: pointer; font-size: 13px; font-weight: 500; border-bottom: 3px solid transparent; transition: all .2s; }
+.nav-tab:hover { background: rgba(255,255,255,.1); }
+.nav-tab.active { border-bottom-color: #FFC000; background: rgba(255,255,255,.08); }
+.nav-user { padding: 12px 20px; font-size: 12px; opacity: .8; }
+
+/* ── LAYOUT ── */
+.container { max-width: 1300px; margin: 0 auto; padding: 20px; }
+.page { display: none; }
+.page.active { display: block; }
+
+/* ── CARDS ── */
+.stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.stat-card { background: white; border-radius: 10px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.08); border-left: 4px solid #2E75B6; }
+.stat-card.warn { border-left-color: #ED7D31; }
+.stat-card.danger { border-left-color: #C00000; }
+.stat-card.success { border-left-color: #548235; }
+.stat-card .label { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: .5px; }
+.stat-card .value { font-size: 28px; font-weight: 700; color: #1F4E79; margin-top: 4px; }
+.stat-card.warn .value { color: #ED7D31; }
+.stat-card.danger .value { color: #C00000; }
+.stat-card.success .value { color: #548235; }
+.stat-card .sub { font-size: 11px; color: #999; margin-top: 4px; }
+
+/* ── PANEL ── */
+.panel { background: white; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 20px; overflow: visible; }
+.panel-header { padding: 16px 20px; border-bottom: 1px solid #e8ecf1; display: flex; justify-content: space-between; align-items: center; }
+.panel-header h3 { font-size: 15px; color: #1F4E79; }
+.panel-body { padding: 20px; }
+
+/* ── TABLE ── */
+table { width: 100%; min-width: 1200px; border-collapse: collapse; font-size: 12px; }
+th { background: #4472C4; color: white; padding: 10px 8px; text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .3px; position: sticky; top: 0; }
+td { padding: 8px; border-bottom: 1px solid #e8ecf1; }
+tr:nth-child(even) { background: #f8fafd; }
+tr:hover { background: #eef3fa; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+.badge-danger { background: #fce4e4; color: #c00; }
+.badge-warn { background: #fff3e0; color: #e65100; }
+.badge-ok { background: #e8f5e9; color: #2e7d32; }
+.badge-info { background: #e3f2fd; color: #1565c0; }
+
+/* ── FORMS ── */
+.form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 16px; }
+.form-group { display: flex; flex-direction: column; }
+.form-group label { font-size: 12px; font-weight: 600; color: #555; margin-bottom: 4px; text-transform: uppercase; letter-spacing: .3px; }
+.form-group input, .form-group select, .form-group textarea { padding: 8px 12px; border: 1px solid #d0d5dd; border-radius: 6px; font-size: 13px; font-family: inherit; transition: border .2s; }
+.form-group input:focus, .form-group select:focus { border-color: #2E75B6; outline: none; box-shadow: 0 0 0 3px rgba(46,117,182,.15); }
+.form-group textarea { resize: vertical; min-height: 60px; }
+
+/* ── BUTTONS ── */
+.btn { padding: 8px 20px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .2s; font-family: inherit; }
+.btn-primary { background: #2E75B6; color: white; }
+.btn-primary:hover { background: #1F4E79; }
+.btn-success { background: #548235; color: white; }
+.btn-success:hover { background: #3d6127; }
+.btn-danger { background: #C00000; color: white; }
+.btn-danger:hover { background: #900; }
+.btn-outline { background: white; color: #2E75B6; border: 1px solid #2E75B6; }
+.btn-outline:hover { background: #f0f7ff; }
+.btn-sm { padding: 4px 12px; font-size: 11px; }
+.btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ── SEARCH ── */
+.search-bar { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+.search-bar input { flex: 1; min-width: 200px; padding: 10px 14px; border: 1px solid #d0d5dd; border-radius: 8px; font-size: 13px; }
+.search-bar input:focus { border-color: #2E75B6; outline: none; }
+.search-bar select { padding: 10px 14px; border: 1px solid #d0d5dd; border-radius: 8px; font-size: 13px; min-width: 180px; }
+
+/* ── FILTERS ── */
+.filter-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.chip { padding: 6px 14px; border-radius: 20px; font-size: 12px; cursor: pointer; border: 1px solid #d0d5dd; background: white; transition: all .2s; }
+.chip.active { background: #2E75B6; color: white; border-color: #2E75B6; }
+.chip:hover { border-color: #2E75B6; }
+
+/* ── MODAL ── */
+.modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.5); z-index: 200; justify-content: center; align-items: flex-start; padding: 40px 20px; overflow-y: auto; }
+.modal-overlay.show { display: flex; }
+.modal { background: white; border-radius: 12px; width: 100%; max-width: 800px; box-shadow: 0 20px 60px rgba(0,0,0,.3); }
+.modal-header { padding: 16px 24px; border-bottom: 1px solid #e8ecf1; display: flex; justify-content: space-between; align-items: center; }
+.modal-header h3 { color: #1F4E79; }
+.modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: #999; }
+.modal-body { padding: 24px; }
+.modal-footer { padding: 16px 24px; border-top: 1px solid #e8ecf1; display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ── PRINT FORMAT ── */
+.print-format { display: none; }
+@page { size: 8.5in 13in; margin: 4mm 15mm; }
+@media print {
+  body, html { margin: 0 !important; padding: 0 !important; width: 100% !important; height: auto !important; overflow: visible !important; }
+  body * { visibility: hidden; display: none; }
+  .modal-overlay, .modal-overlay * { display: none !important; visibility: hidden !important; }
+  .print-format { display: block !important; visibility: visible !important; position: absolute; top: 0; left: 0; width: 100%; margin: 0; padding: 0; }
+  .print-format * { visibility: visible !important; display: revert; }
+  .print-format .solicitud { max-width: 100% !important; width: 100% !important; padding: 4px 0 !important; margin: 0 auto !important; font-size: 15px !important; line-height: 1.35 !important; box-sizing: border-box !important; }
+  /* Asegurar bordes visibles en impresión */
+  .print-format .solicitud table.ft { border-collapse: collapse !important; }
+  .print-format .solicitud table.ft td { border: 1px solid #000 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  .print-format .solicitud table.ft td.nb { border: none !important; }
+  .print-format .solicitud table.ft td.bb0 { border-bottom: none !important; }
+  .print-format .solicitud table.ft td.bt0 { border-top: none !important; }
+  .print-format .solicitud .cx { border: 2px solid #000 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  .print-format .solicitud table.ft { width: 100% !important; }
+  .print-format .solicitud table.ft td { font-size: 15px !important; padding: 5px 6px !important; }
+  .print-format .solicitud table.ft td.hdr { font-size: 16px !important; padding: 8px 10px !important; }
+  .print-format .solicitud table.ft td.lbl { font-size: 13px !important; }
+  .print-format .solicitud table.ft td.val { font-size: 15px !important; }
+  .print-format .solicitud .cx { width: 18px !important; height: 18px !important; line-height: 18px !important; font-size: 14px !important; border-width: 2px !important; }
+  .print-format .solicitud .firma-line { margin-top: 55px !important; font-size: 11px !important; padding-top: 4px !important; }
+  .print-format .solicitud .firma-name { font-size: 13px !important; min-height: 16px !important; }
+  .print-format .solicitud .an-line { margin-top: 20px !important; font-size: 11px !important; }
+  /* Banner institucional */
+  .print-format .solicitud table.ft td[style*="height:55px"] { height: 85px !important; }
+  .print-format .solicitud table.ft td[style*="height:55px"] div[style*="height:55px"] { height: 85px !important; }
+  .print-format .solicitud table.ft td[style*="height:55px"] img { height: 55px !important; }
+  .print-format .solicitud table.ft td[style*="height:55px"] span { font-size: 26px !important; letter-spacing: 3px !important; }
+  /* Firmas - más altas (tr) */
+  .print-format .solicitud table.ft tr[style*="height:35px"] { height: 85px !important; }
+  .print-format .solicitud table.ft tr[style*="height:35px"] td { height: 85px !important; }
+  /* Especifique (tr) */
+  .print-format .solicitud table.ft tr[style*="height:30px"] { height: 70px !important; }
+  .print-format .solicitud table.ft tr[style*="height:30px"] td { height: 70px !important; }
+  /* Filas de datos (tr) */
+  .print-format .solicitud table.ft tr[style*="height:22px"] { height: 36px !important; }
+  .print-format .solicitud table.ft tr[style*="height:20px"] { height: 34px !important; }
+  .print-format .solicitud table.ft tr[style*="height:18px"] { height: 30px !important; }
+  .print-format .solicitud table.ft tr[style*="height:16px"] { height: 28px !important; }
+  .print-format .solicitud table.ft tr[style*="height:14px"] { height: 26px !important; }
+  /* Espacios entre secciones */
+  .print-format .solicitud table.ft tr td[style*="height:6px"] { height: 14px !important; }
+  .print-format .solicitud table.ft tr td[style*="height:3px"] { height: 10px !important; }
+  .print-format .solicitud table.ft tr[style*="height:4px"] { height: 8px !important; }
+  .print-format .solicitud table.ft tr[style*="height:4px"] td { height: 8px !important; }
+}
+
+/* ── SOLICITUD PREVIEW (Réplica exacta VACACIONES_8FORMATO.xls — 32 cols) ── */
+.solicitud { font-family: Arial, sans-serif; font-size: 9px; line-height: 1.15; padding: 8px; max-width: 740px; margin: 0 auto; }
+@media print { .solicitud { max-width: 100% !important; width: 100% !important; } }
+.solicitud table.ft { border-collapse: collapse; width: 100%; table-layout: fixed; }
+.solicitud table.ft td { border: 1px solid #000; padding: 2px 3px; font-size: 9px; vertical-align: middle; overflow: hidden; }
+.solicitud table.ft td.hdr { background: #1F4E79; color: #fff; font-weight: bold; font-size: 10px; padding: 3px 6px; }
+.solicitud table.ft td.lbl { font-weight: bold; font-size: 8.5px; background: #f7f7f7; }
+.solicitud table.ft td.val { font-size: 9.5px; }
+.solicitud table.ft td.nb { border: none; }
+.solicitud table.ft td.bt0 { border-top: none; }
+.solicitud table.ft td.bb0 { border-bottom: none; }
+.solicitud table.ft td.ctr { text-align: center; }
+.solicitud table.ft td.vb { vertical-align: bottom; }
+.solicitud table.ft td.vt { vertical-align: top; }
+.solicitud .cx { display: inline-block; width: 13px; height: 13px; border: 1.5px solid #000; text-align: center; line-height: 13px; font-weight: bold; font-size: 9px; margin-right: 2px; vertical-align: middle; }
+.solicitud .firma-line { border-top: 1px solid #000; padding-top: 3px; margin-top: 20px; font-size: 8px; text-align: center; }
+.solicitud .firma-name { font-weight: bold; text-transform: uppercase; font-size: 9px; text-align: center; min-height: 11px; }
+.solicitud .an-row { display: flex; justify-content: space-between; margin-top: 8px; font-size: 8px; }
+.solicitud .an-row div { text-align: center; width: 46%; }
+.solicitud .an-row .an-line { border-top: 1px solid #000; padding-top: 3px; margin-top: 12px; }
+
+/* ── SCROLLABLE TABLE ── */
+.table-scroll { max-height: 500px; overflow: auto; }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 768px) {
+  .nav-tabs { overflow-x: auto; }
+  .nav-tab { white-space: nowrap; padding: 12px 14px; font-size: 12px; }
+  .stats-row { grid-template-columns: 1fr 1fr; }
+  .form-row { grid-template-columns: 1fr; }
+}
+
+.text-right { text-align: right; }
+.text-center { text-align: center; }
+.mt-16 { margin-top: 16px; }
+.mb-8 { margin-bottom: 8px; }
+.mb-16 { margin-bottom: 16px; }
+.highlight { background: #fffde7 !important; }
+
+/* ── LOGIN MODAL ── */
+.login-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(135deg, #1F4E79 0%, #2E75B6 50%, #1F4E79 100%); z-index: 9999; display: flex; justify-content: center; align-items: center; }
+.login-box { background: white; border-radius: 16px; padding: 40px; width: 400px; max-width: 90vw; box-shadow: 0 20px 60px rgba(0,0,0,.4); text-align: center; }
+.login-box h2 { color: #1F4E79; margin-bottom: 6px; font-size: 22px; }
+.login-box .login-sub { color: #666; font-size: 13px; margin-bottom: 24px; }
+.login-box .login-option { background: #f8fafd; border: 2px solid #e0e5ec; border-radius: 12px; padding: 20px; margin-bottom: 12px; cursor: pointer; transition: all .2s; }
+.login-box .login-option:hover { border-color: #2E75B6; background: #f0f7ff; }
+.login-box .login-option.selected { border-color: #2E75B6; background: #e8f0fe; }
+.login-box .login-option h3 { color: #1F4E79; font-size: 15px; margin-bottom: 4px; }
+.login-box .login-option p { color: #666; font-size: 12px; margin: 0; }
+.login-pwd { margin-top: 16px; display: none; }
+.login-pwd input { width: 100%; padding: 12px 16px; border: 2px solid #d0d5dd; border-radius: 8px; font-size: 14px; text-align: center; letter-spacing: 2px; }
+.login-pwd input:focus { border-color: #2E75B6; outline: none; }
+.login-pwd .pwd-error { color: #C00000; font-size: 12px; margin-top: 6px; display: none; }
+.login-enter { margin-top: 16px; }
+.login-enter button { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.login-enter .btn-admin { background: #2E75B6; color: white; margin-bottom: 8px; }
+.login-enter .btn-admin:hover { background: #1F4E79; }
+.login-enter .btn-view { background: #f0f2f5; color: #555; border: 1px solid #d0d5dd; }
+.login-enter .btn-view:hover { background: #e8ecf1; }
+
+/* ── ADMIN INDICATOR ── */
+.nav-role { padding: 8px 16px; font-size: 11px; display: flex; align-items: center; gap: 8px; }
+.nav-role .role-badge { padding: 3px 10px; border-radius: 12px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+.role-admin { background: #548235; color: white; }
+.role-viewer { background: #ED7D31; color: white; }
+.nav-role .btn-logout { background: none; border: 1px solid rgba(255,255,255,.3); color: rgba(255,255,255,.8); padding: 3px 10px; border-radius: 12px; font-size: 10px; cursor: pointer; font-family: inherit; }
+.nav-role .btn-logout:hover { background: rgba(255,255,255,.15); }
+
+/* ── CALENDARIO ── */
+.cal-nav { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+.cal-nav h3 { font-size: 18px; color: #1F4E79; min-width: 220px; text-align: center; }
+.cal-nav button { background: #2E75B6; color: white; border: none; border-radius: 6px; padding: 6px 14px; font-size: 13px; cursor: pointer; font-weight: 600; }
+.cal-nav button:hover { background: #1F4E79; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: #d0d5dd; border-radius: 8px; overflow: hidden; }
+.cal-hdr { background: #4472C4; color: white; text-align: center; padding: 8px 0; font-size: 12px; font-weight: 700; }
+.cal-day { background: white; min-height: 90px; padding: 4px 6px; font-size: 11px; position: relative; cursor: pointer; transition: background .15s; }
+.cal-day:hover { background: #f0f7ff; }
+.cal-day.other-month { background: #f8f9fa; color: #ccc; }
+.cal-day.today { background: #fffde7; border: 2px solid #FFC000; }
+.cal-day.feriado { background: #fff0f0; }
+.cal-day .day-num { font-weight: 700; font-size: 13px; color: #1F4E79; margin-bottom: 2px; }
+.cal-day.other-month .day-num { color: #ccc; }
+.cal-day.feriado .day-num { color: #C00; }
+.cal-day .day-num .fer-tag { font-size: 8px; font-weight: 600; color: #C00; background: #fce4e4; padding: 1px 4px; border-radius: 3px; margin-left: 4px; vertical-align: middle; }
+.cal-event { font-size: 10px; padding: 1px 4px; border-radius: 3px; margin-bottom: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-event.vac { background: #e3f2fd; color: #1565c0; border-left: 2px solid #2E75B6; }
+.cal-event.rep { background: #fce4e4; color: #c00; border-left: 2px solid #C00; }
+.cal-more { font-size: 9px; color: #2E75B6; font-weight: 600; cursor: pointer; padding: 1px 4px; }
+.cal-legend { display: flex; gap: 20px; margin-top: 12px; font-size: 12px; align-items: center; }
+.cal-legend span { display: flex; align-items: center; gap: 6px; }
+.cal-legend .dot { width: 12px; height: 12px; border-radius: 3px; }
+.cal-detail-panel { margin-top: 16px; }
+
+/* ── HIDE ADMIN ELEMENTS ── */
+body.viewer-mode .admin-only { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════ LOGIN ══════════════ -->
+<div id="login-screen" class="login-overlay">
+  <div class="login-box">
+    <h2>Vacaciones y Reposos</h2>
+    <p class="login-sub">Gestión Humana PIM III Chocó-Isidora · Sistema unificado</p>
+
+    <div class="login-pwd" id="login-pwd" style="display:block">
+      <input type="email" id="login-email" placeholder="Correo" autocomplete="username" style="margin-bottom:8px">
+      <input type="password" id="login-password" placeholder="Contraseña" autocomplete="current-password" onkeydown="if(event.key==='Enter')loginAdmin()">
+      <p class="pwd-error" id="pwd-error">Correo o contraseña incorrectos</p>
+    </div>
+    <div class="login-enter">
+      <button class="btn-admin" id="btn-login-admin" onclick="loginAdmin()">Entrar</button>
+    </div>
+  </div>
+</div>
+
+<div class="nav">
+  <div class="nav-brand">
+    <a href="sistema.html" style="color:inherit;text-decoration:none" title="Volver al menú">&larr; <span>GH PIM III</span></a> | Vacaciones y Reposos
+  </div>
+  <div class="nav-tabs">
+    <div class="nav-tab active" onclick="showPage('dashboard')">Dashboard</div>
+    <div class="nav-tab" onclick="showPage('vacaciones')">Vacaciones Vencidas</div>
+    <div class="nav-tab admin-only" onclick="showPage('solicitud')">Nueva Solicitud</div>
+    <div class="nav-tab admin-only" onclick="showPage('reposos')">Reposos</div>
+    <div class="nav-tab" onclick="showPage('calendario')">Calendario</div>
+    <div class="nav-tab" onclick="showPage('historial')">Historial</div>
+  </div>
+  <div class="nav-role" id="nav-role-area">
+    <span class="role-badge role-viewer" id="role-badge">CONSULTA</span>
+    <button class="btn-logout" onclick="cerrarSesion()">Salir</button>
+  </div>
+</div>
+
+<!-- ══════════════ DASHBOARD ══════════════ -->
+<div class="container">
+<div id="page-dashboard" class="page active">
+  <h2 style="margin-bottom:20px;color:#1F4E79;">Dashboard — Agosto 2026</h2>
+  <div class="stats-row" id="stats-cards"></div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+    <div class="panel">
+      <div class="panel-header"><h3>Vacaciones por Sede</h3></div>
+      <div class="panel-body">
+        <canvas id="chart-sede" height="200"></canvas>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header"><h3>Distribución por Años Vencidos</h3></div>
+      <div class="panel-body">
+        <canvas id="chart-vencidas" height="200"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <h3>Trabajadores con Mayor Cantidad de Vacaciones Vencidas</h3>
+    </div>
+    <div class="panel-body">
+      <table id="top-vencidas"></table>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header"><h3>Solicitudes Recientes</h3></div>
+    <div class="panel-body" id="recent-solicitudes">
+      <p style="color:#999;font-size:13px;">Las solicitudes generadas aparecerán aquí.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ VACACIONES VENCIDAS ══════════════ -->
+<div id="page-vacaciones" class="page">
+  <h2 style="margin-bottom:20px;color:#1F4E79;">Data de Vacaciones Vencidas</h2>
+
+  <div class="search-bar">
+    <input type="text" id="search-vac" placeholder="Buscar por nombre o cédula..." oninput="filterVacaciones()">
+    <select id="filter-sede" onchange="filterVacaciones()">
+      <option value="">Todas las sedes</option>
+      <option value="PIM III - Planta Choco">Planta Chocó</option>
+      <option value="PIM III - Mina Isidora">Mina Isidora</option>
+    </select>
+    <select id="filter-vencidas" onchange="filterVacaciones()">
+      <option value="">Todos</option>
+      <option value="critico">Crítico (+8 años)</option>
+      <option value="alto">Alto (5-8 años)</option>
+      <option value="medio">Medio (3-4 años)</option>
+      <option value="bajo">Bajo (1-2 años)</option>
+    </select>
+    <select id="filter-tipo-personal" onchange="filterVacaciones()">
+      <option value="">Todos los tipos</option>
+      <option value="DIRECCIÓN Y CONFIANZA">Dirección y Confianza</option>
+      <option value="EMPLEADOS">Empleados</option>
+      <option value="OPERATIVOS">Operativos</option>
+      <option value="CONTRATADOS">Contratados</option>
+    </select>
+    <button class="btn btn-outline" onclick="exportVacaciones()">Descargar Excel</button>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <h3>Registros: <span id="count-vac">0</span></h3>
+      <button class="btn btn-primary btn-sm admin-only" onclick="document.getElementById('import-file').click()">Importar Excel</button>
+      <button class="btn btn-warning btn-sm admin-only" onclick="unificarDuplicadosManual()">Unificar duplicados</button>
+      <input type="file" id="import-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="importFile(this)">
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>N°</th>
+            <th>Cédula</th>
+            <th>Apellidos y Nombres</th>
+            <th>Cargo</th>
+            <th>Tipo Personal</th>
+            <th>F. Ingreso</th>
+            <th>Últ. Disfrutado</th>
+            <th>Período Pendiente</th>
+            <th>Años Venc.</th>
+            <th>Días Corresp.</th>
+            <th>Base</th>
+            <th>Ubicación</th>
+            <th>Nivel</th>
+            <th>Solicitud</th>
+            <th style="min-width:160px;">Acción</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-vac"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ NUEVA SOLICITUD ══════════════ -->
+<div id="page-solicitud" class="page">
+  <h2 style="margin-bottom:20px;color:#1F4E79;">Solicitud de Vacaciones</h2>
+
+  <div class="panel">
+    <div class="panel-header"><h3>I. Datos del Trabajador o Trabajadora</h3></div>
+    <div class="panel-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Cédula de Identidad</label>
+          <input type="text" id="sol-cedula" placeholder="Ej: 20264587" oninput="buscarTrabajador()">
+        </div>
+        <div class="form-group">
+          <label>Apellidos y Nombres</label>
+          <input type="text" id="sol-nombre" placeholder="Se autocompleta al ingresar cédula">
+        </div>
+        <div class="form-group">
+          <label>Cargo</label>
+          <input type="text" id="sol-cargo">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Fecha de Ingreso</label>
+          <input type="text" id="sol-ingreso">
+        </div>
+        <div class="form-group">
+          <label>Unidad de Adscripción (Coordinación)</label>
+          <input type="text" id="sol-unidad" list="list-unidad" value="Coordinación de Gestión Humana">
+          <datalist id="list-unidad">
+            <option value="Coordinación de Gestión Humana">
+            <option value="Coordinación de Planificación">
+            <option value="Coordinación de Seguimiento y Control">
+            <option value="Coordinación de Gestión Administrativa">
+            <option value="Coordinación de Insumos y Equipos Mineros">
+            <option value="Coordinación de Bienestar Social">
+            <option value="Gerencia de Planta">
+            <option value="Gerencia de Mina">
+            <option value="Gerencia de Geología">
+            <option value="Gerencia de Servicios de Voladura">
+            <option value="Mantenimiento de Planta">
+            <option value="Manejo de Minerales">
+            <option value="Taller Diesel">
+            <option value="Laboratorio">
+            <option value="Aseguramiento de la Calidad">
+            <option value="Servicios Generales">
+            <option value="Seguridad Industrial">
+            <option value="Ingeniería y Proyectos">
+            <option value="Tecnología de la Información">
+            <option value="Servicio Médico">
+            <option value="Almacén">
+            <option value="P.C.P">
+          </datalist>
+        </div>
+        <div class="form-group">
+          <label>Unidad Administrativa (Gerencia)</label>
+          <input type="text" id="sol-unidad-admin" list="list-unidad-admin" value="Gerencia de Gestión Administrativa">
+          <datalist id="list-unidad-admin">
+            <option value="Gerencia de Gestión Administrativa">
+            <option value="Gerencia Operacional PIM III Chocó">
+            <option value="Gerencia de Planta">
+            <option value="Gerencia de Mina">
+            <option value="Gerencia de Geología">
+            <option value="Gerencia de Servicios de Voladura">
+            <option value="Gerencia de Mantenimiento de Planta">
+            <option value="Gerencia Corporativa de Recursos Humanos">
+          </datalist>
+        </div>
+        <div class="form-group">
+          <label>Condición de Contratación</label>
+          <select id="sol-condicion">
+            <option value="">Seleccionar...</option>
+            <option value="CONTRATADO">Contratado</option>
+            <option value="OPERATIVO (OBRERO)">Operativo (Obrero)</option>
+            <option value="DIRECCION Y CONFIANZA">Dirección y Confianza</option>
+            <option value="EMPLEADO">Empleado</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Ubicación</label>
+          <select id="sol-ubicacion">
+            <option value="PIM III - Planta Choco">PIM III - Planta Chocó</option>
+            <option value="PIM III - Mina Isidora">PIM III - Mina Isidora</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Sueldo Normal Mensual (Bs.)</label>
+          <input type="text" id="sol-sueldo" placeholder="0.00">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header"><h3>II. Vacaciones</h3></div>
+    <div class="panel-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Fecha de Solicitud</label>
+          <input type="date" id="sol-fecha">
+        </div>
+        <div class="form-group">
+          <label>Período</label>
+          <input type="text" id="sol-periodo" placeholder="Ej: 2023-2024">
+        </div>
+        <div class="form-group">
+          <label>Período Pendiente</label>
+          <input type="text" id="sol-periodo-pend" placeholder="Ej: 2024-2025">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Desde</label>
+          <input type="date" id="sol-desde" onchange="calcularDias()">
+        </div>
+        <div class="form-group">
+          <label>Hasta</label>
+          <input type="date" id="sol-hasta" onchange="calcularDias()">
+        </div>
+        <div class="form-group">
+          <label>Días a Disfrutar</label>
+          <input type="text" id="sol-dias" placeholder="Se calcula al ingresar cédula">
+          <small id="sol-base-info" style="color:#2E75B6;font-size:11px;margin-top:4px;"></small>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Fecha de Reintegro</label>
+          <input type="date" id="sol-reintegro">
+        </div>
+        <div class="form-group">
+          <label>Observaciones</label>
+          <textarea id="sol-obs" placeholder="Observaciones adicionales..."></textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header"><h3>IV. Autorización</h3></div>
+    <div class="panel-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Supervisor(a) Inmediato(a)</label>
+          <input type="text" id="sol-supervisor">
+        </div>
+        <div class="form-group">
+          <label>Gerente</label>
+          <input type="text" id="sol-gerente">
+        </div>
+        <div class="form-group">
+          <label>Coordinador(a) de Gestión Humana / Gerencia Operacional</label>
+          <input type="text" id="sol-coord-gh" value="RUTH SARAÍ SILVA MOGOLLÓN">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Gerente de la Oficina de Gestión Humana</label>
+          <input type="text" id="sol-gerente-gh">
+        </div>
+        <div class="form-group">
+          <label>Coordinador(a) de Bienestar Social</label>
+          <input type="text" id="sol-coord-bs">
+        </div>
+        <div class="form-group">
+          <label>Comisión de Servicios / Apoyo Institucional</label>
+          <input type="text" id="sol-comision">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="btn-group mt-16">
+    <button class="btn btn-primary" onclick="previsualizarSolicitud()">Previsualizar</button>
+    <button class="btn btn-success" onclick="guardarSolicitud()">Guardar Solicitud</button>
+    <button class="btn btn-outline" onclick="limpiarSolicitud()">Limpiar Formulario</button>
+  </div>
+</div>
+
+
+<!-- ══════════════ REPOSOS ══════════════ -->
+<div id="page-reposos" class="page">
+  <h2 style="margin-bottom:20px;color:#1F4E79;">Relación del Personal con Reposos Médicos — Bienestar Social</h2>
+
+  <div class="panel" style="border-top:3px solid #548235;">
+    <div class="panel-header" style="background:#f0f7e6;"><h3 style="color:#548235;">Registrar Nuevo Reposo</h3></div>
+    <div class="panel-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label>C.I.</label>
+          <input type="text" id="rep-cedula" placeholder="Cédula del trabajador" oninput="buscarTrabajadorReposo()">
+        </div>
+        <div class="form-group" style="grid-column: span 2;">
+          <label>Nombres y Apellidos</label>
+          <input type="text" id="rep-nombre">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Unidad de Adscripción (Gerencia/Coordinación)</label>
+          <input type="text" id="rep-unidad" list="list-rep-unidad" placeholder="Seleccione o escriba...">
+          <datalist id="list-rep-unidad">
+            <option value="Coordinación de Gestión Humana">
+            <option value="Coordinación de Planificación">
+            <option value="Coordinación de Seguimiento y Control">
+            <option value="Coordinación de Gestión Administrativa">
+            <option value="Coordinación de Insumos y Equipos Mineros">
+            <option value="Coordinación de Bienestar Social">
+            <option value="Gerencia de Planta">
+            <option value="Gerencia de Mina">
+            <option value="Gerencia de Geología">
+            <option value="Gerencia de Servicios de Voladura">
+            <option value="Gerencia de Mantenimiento de Planta">
+            <option value="Gerencia Operacional PIM III Chocó">
+            <option value="Gerencia de Gestión Administrativa">
+            <option value="Gerencia Corporativa de Recursos Humanos">
+            <option value="Mantenimiento de Planta">
+            <option value="Manejo de Minerales">
+            <option value="Taller Diesel">
+            <option value="Laboratorio">
+            <option value="Aseguramiento de la Calidad">
+            <option value="Servicios Generales">
+            <option value="Seguridad Industrial">
+            <option value="Ingeniería y Proyectos">
+            <option value="Tecnología de la Información">
+            <option value="Servicio Médico">
+            <option value="Almacén">
+            <option value="P.C.P">
+          </datalist>
+        </div>
+        <div class="form-group">
+          <label>Opera (Ubicación)</label>
+          <select id="rep-ubicacion">
+            <option value="PLANTA CHOCÓ">Planta Chocó</option>
+            <option value="MINA ISIDORA">Mina Isidora</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>TPR (Tipo)</label>
+          <select id="rep-tpr">
+            <option value="E">E — Enfermedad</option>
+            <option value="AT">AT — Accidente de Trabajo</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="grid-column: span 2;">
+          <label>Diagnóstico</label>
+          <input type="text" id="rep-diagnostico" placeholder="Diagnóstico médico">
+        </div>
+        <div class="form-group">
+          <label>Emitido Por</label>
+          <select id="rep-emitido">
+            <option value="CENTRO PRIVADO">Centro Privado</option>
+            <option value="BARRIO ADENTRO">Barrio Adentro</option>
+            <option value="SEGURO SOCIAL">Seguro Social</option>
+            <option value="SERVICIO MÉDICO">Servicio Médico</option>
+            <option value="CLÍNICA">Clínica</option>
+            <option value="IVSS">IVSS</option>
+            <option value="ISR">ISR</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Período — Desde</label>
+          <input type="date" id="rep-desde" onchange="calcularDiasReposo()">
+        </div>
+        <div class="form-group">
+          <label>Período — Hasta</label>
+          <input type="date" id="rep-hasta" onchange="calcularDiasReposo()">
+        </div>
+        <div class="form-group">
+          <label>Tiempo (Días)</label>
+          <input type="text" id="rep-dias" readonly>
+        </div>
+        <div class="form-group">
+          <label>Convalidado</label>
+          <select id="rep-convalidado">
+            <option value="EN PROCESO">En Proceso</option>
+            <option value="SI">Sí</option>
+            <option value="NO">No</option>
+            <option value="EXTEMPORÁNEO">Extemporáneo</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Observaciones</label>
+          <textarea id="rep-obs"></textarea>
+        </div>
+      </div>
+      <div class="btn-group mt-16">
+        <button class="btn btn-success" onclick="guardarReposo()">Registrar Reposo</button>
+        <button class="btn btn-outline" onclick="limpiarReposo()">Limpiar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <h3>Reposos Registrados — <span id="mes-reposos">Agosto 2026</span></h3>
+      <div class="btn-group">
+        <select id="filter-mes-rep" onchange="filterReposos()" style="padding:6px 10px;border:1px solid #d0d5dd;border-radius:6px;font-size:12px;">
+          <option value="">Todos los meses</option>
+          <option value="2026-01">Enero 2026</option>
+          <option value="2026-02">Febrero 2026</option>
+          <option value="2026-03">Marzo 2026</option>
+          <option value="2026-04">Abril 2026</option>
+          <option value="2026-05">Mayo 2026</option>
+          <option value="2026-06">Junio 2026</option>
+          <option value="2026-07">Julio 2026</option>
+          <option value="2026-08" selected>Agosto 2026</option>
+          <option value="2026-09">Septiembre 2026</option>
+          <option value="2026-10">Octubre 2026</option>
+          <option value="2026-11">Noviembre 2026</option>
+          <option value="2026-12">Diciembre 2026</option>
+        </select>
+        <button class="btn btn-outline btn-sm" onclick="generarReporteReposos()">Generar Reporte</button>
+        <button class="btn btn-outline btn-sm" onclick="exportReposos()">Descargar Excel</button>
+        <button class="btn btn-primary btn-sm" onclick="document.getElementById('import-reposos-file').click()" style="background:#548235;">Importar Reposos Excel</button>
+        <input type="file" id="import-reposos-file" accept=".xlsx,.xls" style="display:none" onchange="importReposos(this)">
+      </div>
+    </div>
+    <div class="search-bar" style="padding:0 20px;">
+      <input type="text" id="search-rep" placeholder="Buscar por nombre o cédula..." oninput="filterReposos()">
+      <select id="filter-tpr" onchange="filterReposos()">
+        <option value="">Todos los tipos</option>
+        <option value="E">E — Enfermedad</option>
+        <option value="AT">AT — Accidente de Trabajo</option>
+      </select>
+      <select id="filter-convalidado" onchange="filterReposos()">
+        <option value="">Convalidación</option>
+        <option value="SI">Convalidado</option>
+        <option value="NO">No Convalidado</option>
+        <option value="EN PROCESO">En Proceso</option>
+        <option value="EXTEMPORÁNEO">Extemporáneo</option>
+      </select>
+    </div>
+    <div class="table-scroll" style="padding:0 20px 20px;">
+      <table>
+        <thead>
+          <tr>
+            <th>N°</th><th>C.I.</th><th>Nombres y Apellidos</th><th>Unidad de Adscripción</th>
+            <th>Desde</th><th>Hasta</th><th>Tiempo</th><th>TPR</th>
+            <th>Diagnóstico</th><th>Emitido Por</th><th>Opera</th><th>Convalidado</th><th>Acción</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-rep"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ CALENDARIO ══════════════ -->
+<div id="page-calendario" class="page">
+  <h2 style="margin-bottom:20px;color:#1F4E79;">Calendario de Vacaciones y Reposos</h2>
+
+  <div class="panel">
+    <div class="panel-body">
+      <div class="cal-nav">
+        <button onclick="calMesAnterior()">◀ Anterior</button>
+        <h3 id="cal-mes-titulo">Agosto 2026</h3>
+        <button onclick="calMesSiguiente()">Siguiente ▶</button>
+        <button onclick="calHoy()" style="background:#548235;">Hoy</button>
+        <div style="flex:1;"></div>
+        <select id="cal-filter-tipo" onchange="renderCalendario()" style="padding:6px 10px;border:1px solid #d0d5dd;border-radius:6px;font-size:12px;">
+          <option value="">Vacaciones y Reposos</option>
+          <option value="VAC">Solo Vacaciones</option>
+          <option value="REP">Solo Reposos</option>
+        </select>
+      </div>
+
+      <div class="cal-grid" id="cal-grid"></div>
+
+      <div class="cal-legend">
+        <span><span class="dot" style="background:#e3f2fd;border:1px solid #2E75B6;"></span> Vacaciones</span>
+        <span><span class="dot" style="background:#fce4e4;border:1px solid #C00;"></span> Reposo Médico</span>
+        <span><span class="dot" style="background:#fff0f0;border:1px solid #fcc;"></span> Feriado</span>
+        <span><span class="dot" style="background:#fffde7;border:2px solid #FFC000;"></span> Hoy</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel cal-detail-panel" id="cal-detail-panel" style="display:none;">
+    <div class="panel-header">
+      <h3 id="cal-detail-title">Detalle del día</h3>
+    </div>
+    <div class="panel-body" id="cal-detail-body"></div>
+  </div>
+</div>
+
+<!-- ══════════════ HISTORIAL ══════════════ -->
+<div id="page-historial" class="page">
+  <h2 style="margin-bottom:20px;color:#1F4E79;">Historial General</h2>
+  <div class="search-bar">
+    <input type="text" id="search-hist" placeholder="Buscar por nombre o cédula..." oninput="filterHistorial()">
+    <select id="filter-tipo-hist" onchange="filterHistorial()">
+      <option value="">Todos</option>
+      <option value="VACACIONES">Vacaciones</option>
+      <option value="REPOSO">Reposos</option>
+    </select>
+    <select id="filter-estado-hist" onchange="filterHistorial()">
+      <option value="">Todos los estados</option>
+      <option value="APROBADA">Aprobada</option>
+      <option value="PENDIENTE">Pendiente</option>
+      <option value="EN DISFRUTE">En Disfrute</option>
+      <option value="COMPLETADA">Completada</option>
+      <option value="ACTIVO">Activo</option>
+      <option value="FINALIZADO">Finalizado</option>
+    </select>
+    <button class="btn btn-outline btn-sm" onclick="exportHistorial()">Descargar Excel</button>
+  </div>
+  <div class="panel">
+    <div class="panel-body">
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>N°</th><th>Fecha</th><th>Tipo</th><th>Cédula</th><th>Nombre</th><th>Período/Motivo</th><th>Desde</th><th>Hasta</th><th>Días</th><th>Estado</th><th>Acción</th></tr>
+          </thead>
+          <tbody id="tbody-hist"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /container -->
+
+<!-- ══════════════ MODAL VISTA PREVIA ══════════════ -->
+<div class="modal-overlay" id="modal-preview">
+  <div class="modal" style="max-width:820px;">
+    <div class="modal-header">
+      <h3>Solicitud de Vacaciones</h3>
+      <button class="modal-close" onclick="closeModal('modal-preview')">&times;</button>
+    </div>
+    <div class="modal-body" id="modal-preview-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-preview')">Cerrar</button>
+      <button class="btn btn-primary" onclick="imprimirSolicitud()">Imprimir / PDF</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL EDITAR TRABAJADOR -->
+<div class="modal-overlay" id="modal-editar">
+  <div class="modal" style="max-width:600px;">
+    <div class="modal-header">
+      <h3>Editar Datos del Trabajador</h3>
+      <button class="modal-close" onclick="closeModal('modal-editar')">&times;</button>
+    </div>
+    <div class="modal-body" id="modal-editar-body" style="padding:20px;">
+      <input type="hidden" id="edit-idx">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div style="grid-column:1/3;">
+          <label style="font-weight:bold;font-size:12px;color:#475467;">CÉDULA</label>
+          <input type="text" id="edit-cedula" readonly style="width:100%;padding:8px;border:1px solid #d0d5dd;border-radius:6px;background:#f9fafb;color:#667085;">
+        </div>
+        <div style="grid-column:1/3;">
+          <label style="font-weight:bold;font-size:12px;color:#475467;">NOMBRE COMPLETO</label>
+          <input type="text" id="edit-nombre" style="width:100%;padding:8px;border:1px solid #d0d5dd;border-radius:6px;">
+        </div>
+        <div>
+          <label style="font-weight:bold;font-size:12px;color:#475467;">CARGO</label>
+          <input type="text" id="edit-cargo" style="width:100%;padding:8px;border:1px solid #d0d5dd;border-radius:6px;">
+        </div>
+        <div>
+          <label style="font-weight:bold;font-size:12px;color:#475467;">FECHA INGRESO</label>
+          <input type="text" id="edit-ingreso" placeholder="dd/mm/aaaa" style="width:100%;padding:8px;border:1px solid #d0d5dd;border-radius:6px;">
+        </div>
+        <div>
+          <label style="font-weight:bold;font-size:12px;color:#475467;">UBICACIÓN</label>
+          <select id="edit-ubicacion" style="width:100%;padding:8px;border:1px solid #d0d5dd;border-radius:6px;">
+            <option value="PIM III - Planta Choco">PIM III - Planta Choco</option>
+            <option value="PIM III - Mina Isidora">PIM III - Mina Isidora</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-weight:bold;font-size:12px;color:#475467;">ÚLTIMO PERÍODO (año)</label>
+          <input type="text" id="edit-up" placeholder="Ej: 2022" style="width:100%;padding:8px;border:1px solid #d0d5dd;border-radius:6px;">
+        </div>
+        <div>
+          <label style="font-weight:bold;font-size:12px;color:#475467;">PERÍODO PENDIENTE</label>
+          <input type="text" id="edit-pp" placeholder="Ej: 2022-2023" style="width:100%;padding:8px;border:1px solid #d0d5dd;border-radius:6px;">
+        </div>
+        <div>
+          <label style="font-weight:bold;font-size:12px;color:#475467;">TOTAL VAC. VENCIDAS</label>
+          <input type="text" id="edit-tv" placeholder="Ej: 5" style="width:100%;padding:8px;border:1px solid #d0d5dd;border-radius:6px;">
+        </div>
+        <div style="grid-column:1/3;">
+          <label style="font-weight:bold;font-size:12px;color:#475467;">OBSERVACIÓN</label>
+          <input type="text" id="edit-obs" style="width:100%;padding:8px;border:1px solid #d0d5dd;border-radius:6px;">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-editar')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarEdicion()">Guardar Cambios</button>
+    </div>
+  </div>
+</div>
+
+<!-- PRINT AREA -->
+<div id="print-area" class="print-format"></div>
+
+<script>window.__VACATION_DATA__ = []; window.__SALARY_DATA__ = {}; window.__NOMINA_LOOKUP__ = {};
+</script>
+<script>
+// ══════════════ AUTENTICACIÓN (Firebase, sistema unificado) ══════════════
+let isAdmin = false;
+function selectLoginAdmin() {}
+function selectLoginViewer() {}
+function loginAdmin() {
+  const e = document.getElementById('login-email').value.trim();
+  const p = document.getElementById('login-password').value;
+  firebase.auth().signInWithEmailAndPassword(e, p).catch(() => {
+    document.getElementById('pwd-error').style.display = 'block';
+    document.getElementById('login-password').value = '';
+    setTimeout(() => { document.getElementById('pwd-error').style.display = 'none'; }, 2500);
+  });
+}
+function loginViewer() {}
+function activarSesion() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.body.classList.remove('viewer-mode');
+  const u = firebase.auth().currentUser;
+  document.getElementById('role-badge').textContent = u ? u.email.split('@')[0] : 'RRHH PIM III';
+  document.getElementById('role-badge').className = 'role-badge role-admin';
+  if (vacacionesData.length > 0) { renderVacaciones(); renderDashboard(); }
+}
+function cerrarSesion() { firebase.auth().signOut().then(() => location.reload()); }
+
+// ══════════════ FIREBASE CONFIG ══════════════
+// ⚠️ IMPORTANTE: Reemplazar estos valores con los de tu proyecto Firebase
+// Los encuentras en: Firebase Console → Configuración del proyecto → General → Tu app web
+const firebaseConfig = {
+  apiKey: "AIzaSyBJiS_a9CVKXXvWPZ85e4iBmDpFijM7y6Q",
+  authDomain: "beneficio-pimiii-hcm-utiles.firebaseapp.com",
+  projectId: "beneficio-pimiii-hcm-utiles",
+  storageBucket: "beneficio-pimiii-hcm-utiles.firebasestorage.app",
+  messagingSenderId: "691905699172",
+  appId: "1:691905699172:web:b68e8be7947135e7abae71"
+};
+
+let db = null;
+let firebaseOK = false;
+let _firebaseLoaded = false; // Protección: no guardar en Firebase hasta que la carga inicial termine
+try {
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.firestore();
+  // Solo marcar OK si el projectId fue configurado
+  firebaseOK = true;
+} catch(e) { console.warn('Firebase no disponible, usando localStorage:', e); }
+
+// ══════════════ DATA STORE ══════════════
+let vacacionesData = [];
+let sueldoData = window.__SALARY_DATA__ || {}; // {cedula: sueldo_mensual}
+let nominaLookup = window.__NOMINA_LOOKUP__ || {}; // {cedula: {t: tipo, i: fecha_ingreso}}
+let solicitudes = [];
+let reposos = [];
+let nextSolId = 1;
+let nextRepId = 1;
+let _idc = 0; const nuevoId = () => Date.now() * 1000 + (_idc++ % 1000);
+
+// Load from localStorage as fallback / initial load
+try {
+  solicitudes = JSON.parse(localStorage.getItem('ghu_solicitudes') || '[]');
+  reposos = JSON.parse(localStorage.getItem('ghu_reposos') || '[]');
+  nextSolId = solicitudes.length ? Math.max(...solicitudes.map(s=>s.id)) + 1 : 1;
+  nextRepId = reposos.length ? Math.max(...reposos.map(r=>r.id)) + 1 : 1;
+} catch(e) {}
+
+// Cargar vacacionesData desde localStorage (para que sobreviva al F5)
+try {
+  const savedVacData = localStorage.getItem('ghu_vacaciones_data');
+  if (savedVacData) {
+    vacacionesData = JSON.parse(savedVacData);
+    vacacionesData.forEach(r => r._original = true);
+    console.log('vacacionesData restaurada desde localStorage: ' + vacacionesData.length + ' registros.');
+  }
+} catch(e) { console.warn('Error cargando vacacionesData desde localStorage:', e); }
+
+// ══════════════ ESTADO AUTOMÁTICO POR FECHAS ══════════════
+function calcularEstadoAutomatico(desde, hasta) {
+  if (!desde && !hasta) return 'PENDIENTE';
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  if (desde) {
+    const fDesde = parseFechaFlexible(desde);
+    if (fDesde && hoy < fDesde) return 'APROBADA';
+    if (hasta) {
+      const fHasta = parseFechaFlexible(hasta);
+      if (fHasta) {
+        if (hoy >= fDesde && hoy <= fHasta) return 'EN DISFRUTE';
+        if (hoy > fHasta) return 'COMPLETADA';
+      }
+    }
+    // Tiene desde pero no hasta
+    if (fDesde && hoy >= fDesde) return 'EN DISFRUTE';
+  }
+  return 'APROBADA';
+}
+
+// Parsear fecha en formatos dd/mm/yyyy o yyyy-mm-dd
+function parseFechaFlexible(str) {
+  if (!str) return null;
+  str = String(str).trim();
+  let d;
+  if (str.includes('/')) {
+    const p = str.split('/');
+    if (p.length === 3) d = new Date(parseInt(p[2]), parseInt(p[1]) - 1, parseInt(p[0]));
+  } else if (str.includes('-')) {
+    const p = str.split('-');
+    if (p.length === 3) {
+      if (p[0].length === 4) d = new Date(parseInt(p[0]), parseInt(p[1]) - 1, parseInt(p[2]));
+      else d = new Date(parseInt(p[2]), parseInt(p[1]) - 1, parseInt(p[0]));
+    }
+  }
+  if (d && !isNaN(d.getTime())) { d.setHours(0, 0, 0, 0); return d; }
+  return null;
+}
+
+// Actualizar estados automáticamente al cargar el sistema
+function actualizarEstadosAutomaticos() {
+  let changed = false;
+  solicitudes.forEach(sol => {
+    if (sol.estado === 'COMPLETADA') return; // No cambiar las ya completadas manualmente
+    const nuevoEstado = calcularEstadoAutomatico(sol.desde, sol.hasta);
+    if (nuevoEstado !== sol.estado) {
+      sol.estado = nuevoEstado;
+      sincronizarEstadoConVacaciones(sol.id, nuevoEstado);
+      changed = true;
+    }
+  });
+  if (changed) {
+    saveData();
+    renderHistorial();
+    renderDashboard();
+  }
+}
+
+function saveData() {
+  // Siempre guardar en localStorage como respaldo
+  try {
+    localStorage.setItem('ghu_solicitudes', JSON.stringify(solicitudes));
+    localStorage.setItem('ghu_reposos', JSON.stringify(reposos));
+  } catch(e) {}
+  // Guardar en Firebase si está disponible
+  if (firebaseOK && db) {
+    saveToFirebase();
+  }
+}
+
+// Guardar vacacionesData para que sobreviva al F5
+function saveVacacionesData() {
+  // Guardar solo campos esenciales (sin flags internos _original, _editado, etc.)
+  const dataLimpia = vacacionesData.map(r => ({
+    c: r.c, n: r.n, g: r.g, i: r.i, u: r.u,
+    up: r.up || '', pp: r.pp || '', tv: r.tv || '', o: r.o || ''
+  }));
+  try {
+    localStorage.setItem('ghu_vacaciones_data', JSON.stringify(dataLimpia));
+  } catch(e) { console.warn('Error guardando vacacionesData en localStorage:', e); }
+  // Guardar en Firebase (solo después de la carga inicial)
+  if (firebaseOK && db && _firebaseLoaded) {
+    // Dividir en chunks de 500 registros (límite Firestore ~1MB por doc)
+    const CHUNK = 500;
+    const totalChunks = Math.ceil(dataLimpia.length / CHUNK) || 1;
+    for (let i = 0; i < totalChunks; i++) {
+      const chunk = dataLimpia.slice(i * CHUNK, (i + 1) * CHUNK);
+      db.collection('vac_config').doc('vacaciones_data_' + i).set({ data: chunk, total: totalChunks })
+        .catch(e => console.warn('Error guardando vacacionesData chunk ' + i + ' en Firebase:', e));
+    }
+    // Limpiar chunks sobrantes de importaciones anteriores más grandes
+    db.collection('vac_config').doc('vacaciones_data_meta').set({ totalChunks, count: dataLimpia.length })
+      .catch(() => {});
+  }
+}
+
+// ══════════════ FIREBASE SYNC ══════════════
+// Control de sincronización: qué hay en la nube y cómo estaba la última vez
+const _nube = { sol: new Map(), rep: new Map() };
+function _marcarNube(tipo, lista) { _nube[tipo] = new Map(lista.map(x => [String(x.id), JSON.stringify(x)])); }
+let _guardando = Promise.resolve();
+function saveToFirebase() {
+  if (!_firebaseLoaded) return;
+  _guardando = _guardando.then(() => _sincronizar()).catch(e => { console.warn('Error guardando en Firebase:', e); avisoNube('No se pudo guardar en la nube: ' + e.message); });
+  return _guardando;
+}
+async function _sincronizar() {
+  for (const [tipo, lista, col] of [['sol', solicitudes, 'vac_solicitudes'], ['rep', reposos, 'vac_reposos']]) {
+    const actuales = new Map(lista.map(x => [String(x.id), JSON.stringify(x)]));
+    let batch = db.batch(), n = 0;
+    const flush = async () => { if (n) { await batch.commit(); batch = db.batch(); n = 0; } };
+    for (const [id, json] of actuales) {
+      if (_nube[tipo].get(id) !== json) { batch.set(db.collection(col).doc(id), JSON.parse(json)); n++; if (n >= 400) await flush(); }
+    }
+    for (const id of [..._nube[tipo].keys()]) {
+      if (!actuales.has(id)) { batch.delete(db.collection(col).doc(id)); n++; if (n >= 400) await flush(); }
+    }
+    await flush();
+    _nube[tipo] = actuales;
+  }
+  const e = document.getElementById('aviso-nube'); if (e) e.remove();
+}
+function avisoNube(t) {
+  let e = document.getElementById('aviso-nube');
+  if (!e) { e = document.createElement('div'); e.id = 'aviso-nube'; e.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:9999;background:#B3261E;color:#fff;padding:10px 16px;font:13px Arial;text-align:center'; document.body.appendChild(e); }
+  e.textContent = t;
+}
+
+async function loadFromFirebase() {
+  if (!firebaseOK || !db) return;
+  try {
+    // Cargar solicitudes
+    const solSnap = await db.collection('vac_solicitudes').get();
+    if (!solSnap.empty) {
+      solicitudes = solSnap.docs.map(d => d.data());
+      nextSolId = solicitudes.length ? Math.max(...solicitudes.map(s => s.id || 0)) + 1 : 1;
+    }
+    // Cargar reposos
+    const repSnap = await db.collection('vac_reposos').get();
+    if (!repSnap.empty) {
+      reposos = repSnap.docs.map(d => d.data());
+      nextRepId = reposos.length ? Math.max(...reposos.map(r => r.id || 0)) + 1 : 1;
+    }
+    // Cargar vacacionesData desde Firebase
+    const metaSnap = await db.collection('vac_config').doc('vacaciones_data_meta').get();
+    if (!metaSnap.exists) {
+      const vs = await db.collection('vac_vencidas').orderBy('orden').get();
+      const base = vs.docs.map(d => { const r = d.data(); delete r.orden; return r; });
+      if (base.length) { vacacionesData = base; vacacionesData.forEach(r => r._original = true); window.__crearBloques = true; }
+    }
+    if (metaSnap.exists) {
+      const totalChunks = metaSnap.data().totalChunks || 1;
+      let allData = [];
+      for (let i = 0; i < totalChunks; i++) {
+        const chunkSnap = await db.collection('vac_config').doc('vacaciones_data_' + i).get();
+        if (chunkSnap.exists && chunkSnap.data().data) {
+          allData = allData.concat(chunkSnap.data().data);
+        }
+      }
+      if (allData.length > 0) {
+        vacacionesData = allData;
+        vacacionesData.forEach(r => r._original = true);
+        // Guardar en localStorage como respaldo
+        try { localStorage.setItem('ghu_vacaciones_data', JSON.stringify(allData)); } catch(e) {}
+        console.log('vacacionesData restaurada desde Firebase: ' + vacacionesData.length + ' registros.');
+      }
+    }
+    // Cargar ediciones de vacaciones (formato v2 por cédula, no por índice)
+    const edSnapV2 = await db.collection('vac_config').doc('vacaciones_ediciones_v2').get();
+    if (edSnapV2.exists && edSnapV2.data().data) {
+      const ediciones = edSnapV2.data().data;
+      Object.keys(ediciones).forEach(key => {
+        const ed = ediciones[key];
+        const reg = vacacionesData.find(r => r.c === ed.c && (r.up || '') === (ed.up || ''));
+        if (reg) {
+          reg.n = ed.n; reg.g = ed.g; reg.i = ed.i; reg.u = ed.u;
+          reg.up = ed.up; reg.pp = ed.pp; reg.tv = ed.tv; reg.o = ed.o;
+          reg._editado = true;
+        }
+      });
+    }
+    // Limpiar formato viejo que causaba corrupción
+    db.collection('vac_config').doc('vacaciones_ediciones').delete().catch(() => {});
+    // Cargar procesados
+    const procSnap = await db.collection('vac_config').doc('procesados').get();
+    if (procSnap.exists) {
+      const procesados = procSnap.data().data || [];
+      procesados.forEach(p => {
+        const idx = vacacionesData.findIndex(r => r.c === p.c && r.up === p.up);
+        if (idx >= 0) vacacionesData[idx]._procesado = true;
+      });
+    }
+    // Guardar en localStorage como respaldo
+    try {
+      localStorage.setItem('ghu_solicitudes', JSON.stringify(solicitudes));
+      localStorage.setItem('ghu_reposos', JSON.stringify(reposos));
+    } catch(e) {}
+    // Marcar que la carga inicial terminó — ahora sí se puede guardar en Firebase
+    _marcarNube('sol', solicitudes); _marcarNube('rep', reposos);
+    _firebaseLoaded = true;
+    if (window.__crearBloques) { saveVacacionesData(); window.__crearBloques = false; }
+    vacacionesData.forEach(r => { const inf = nominaLookup[r.c]; if (inf) r.tp = inf.t || ''; });
+    // Aplicar ediciones y nuevos registros sobre los datos restaurados
+    cargarEdicionesData();
+    cargarNuevosRegistros();
+    actualizarEstadosAutomaticos();
+    // Re-renderizar
+    renderVacaciones();
+    renderReposos();
+    renderHistorial();
+    renderDashboard();
+    console.log('Datos sincronizados desde Firebase.');
+  } catch(e) {
+    console.warn('Error cargando desde Firebase:', e);
+    avisoNube('No se pudieron cargar los datos de la nube (' + e.message + '). Recarga la página; no se guardará nada hasta que carguen.');
+  }
+}
+
+// Escuchar cambios en tiempo real (para que Caracas vea actualizaciones)
+function listenFirebase() {
+  if (!firebaseOK || !db) return;
+  db.collection('vac_solicitudes').onSnapshot(snap => {
+    if (snap.empty) return;
+    solicitudes = snap.docs.map(d => d.data());
+    _marcarNube('sol', solicitudes);
+    renderHistorial();
+    renderDashboard();
+  }, err => console.warn('Error listener solicitudes:', err));
+
+  db.collection('vac_reposos').onSnapshot(snap => {
+    if (snap.empty) return;
+    reposos = snap.docs.map(d => d.data());
+    _marcarNube('rep', reposos);
+    renderReposos();
+    renderHistorial();
+    renderDashboard();
+  }, err => console.warn('Error listener reposos:', err));
+}
+
+// ══════════════ CÁLCULO DE DÍAS DE VACACIONES ══════════════
+// ══════════════ FERIADOS VENEZOLANOS ══════════════
+// Algoritmo de Butcher para calcular Domingo de Pascua
+function calcularPascua(year) {
+  const a = year % 19, b = Math.floor(year/100), c = year % 100;
+  const d = Math.floor(b/4), e = b % 4, f = Math.floor((b+8)/25);
+  const g = Math.floor((b-f+1)/3), h = (19*a+b-d-g+15) % 30;
+  const i = Math.floor(c/4), k = c % 4;
+  const l = (32+2*e+2*i-h-k) % 7;
+  const m = Math.floor((a+11*h+22*l)/451);
+  const mes = Math.floor((h+l-7*m+114)/31) - 1;
+  const dia = ((h+l-7*m+114) % 31) + 1;
+  return new Date(year, mes, dia);
+}
+
+function obtenerFeriados(year) {
+  // ═══ LOTTT Art. 184 + Ley de Fiestas Nacionales ═══
+  // Solo los 15 feriados nacionales obligatorios por ley
+  const fijos = [
+    // LOTTT Art. 184 literal b)
+    [0, 1],   // 1 Ene — Año Nuevo
+    [4, 1],   // 1 May — Día del Trabajador
+    [11, 24], // 24 Dic — Nochebuena
+    [11, 25], // 25 Dic — Navidad
+    [11, 31], // 31 Dic — Fin de Año
+    // LOTTT Art. 184 literal c) — Ley de Fiestas Nacionales
+    [3, 19],  // 19 Abr — Declaración de Independencia
+    [5, 24],  // 24 Jun — Batalla de Carabobo
+    [6, 5],   // 5 Jul — Día de la Independencia
+    [6, 24],  // 24 Jul — Natalicio de Bolívar
+    [9, 12],  // 12 Oct — Día de la Resistencia Indígena
+  ];
+  const lista = fijos.map(([m, d]) => new Date(year, m, d));
+  // LOTTT Art. 184 literal b) — Feriados móviles basados en Pascua
+  const pascua = calcularPascua(year);
+  const ms = pascua.getTime();
+  lista.push(new Date(ms - 48*864e5)); // Lunes de Carnaval
+  lista.push(new Date(ms - 47*864e5)); // Martes de Carnaval
+  lista.push(new Date(ms - 3*864e5));  // Jueves Santo
+  lista.push(new Date(ms - 2*864e5));  // Viernes Santo
+  // Total: 14 fechas fijas/móviles + domingos = 15 feriados por ley
+  return lista;
+}
+
+// Cache de feriados por año
+const _cacheFeriados = {};
+function esFeriado(date) {
+  const y = date.getFullYear();
+  if (!_cacheFeriados[y]) {
+    _cacheFeriados[y] = new Set(obtenerFeriados(y).map(d =>
+      d.getFullYear()*10000 + (d.getMonth()+1)*100 + d.getDate()));
+  }
+  const key = y*10000 + (date.getMonth()+1)*100 + date.getDate();
+  return _cacheFeriados[y].has(key);
+}
+
+function esDiaHabil(date) {
+  const dow = date.getDay();
+  if (dow === 0 || dow === 6) return false; // Sáb/Dom
+  if (esFeriado(date)) return false;
+  return true;
+}
+
+// ══════════════ CÁLCULO DE DÍAS DE VACACIONES ══════════════
+// Último período ≤ 2018 → LOT: 15 días hábiles + 1 día por año de servicio al momento del período (tope 15 adic.)
+// Último período ≥ 2019 → PUNTO DE CUENTA CVM: 30 días hábiles
+// Días hábiles = excluye sábados, domingos y feriados venezolanos
+function calcularDiasVacaciones(record) {
+  let ultimoPeriodo = parseInt(record.up) || 0;
+  const fechaIngreso = record.i; // formato dd/mm/yyyy
+
+  // Parsear año de ingreso
+  let anioIngreso = 0;
+  if (fechaIngreso) {
+    const parts = fechaIngreso.split('/');
+    if (parts.length === 3) {
+      anioIngreso = parseInt(parts[2]);
+    }
+  }
+
+  // Si no tiene último periodo registrado, calcular desde fecha de ingreso
+  if (ultimoPeriodo <= 0 && anioIngreso > 0) {
+    const anosServicioTotal = Math.floor((new Date() - new Date(anioIngreso, 0, 1)) / (365.25*864e5));
+    ultimoPeriodo = anioIngreso + Math.max(anosServicioTotal - 1, 0);
+    if (ultimoPeriodo < anioIngreso) ultimoPeriodo = anioIngreso;
+    record._upCalc = ultimoPeriodo;
+  }
+
+  if (ultimoPeriodo <= 0) return { dias: 0, base: '', detalle: 'Sin período registrado' };
+
+  if (ultimoPeriodo <= 2018) {
+    // LOT: 15 + 1 por año de servicio AL MOMENTO DEL PERÍODO (no a hoy)
+    // Años de servicio = año del período + 1 - año de ingreso
+    let anosServicio = anioIngreso > 0 ? (ultimoPeriodo + 1 - anioIngreso) : 1;
+    if (anosServicio < 1) anosServicio = 1;
+    const diasBase = 15;
+    // LOTTT Art. 190: 15 días el 1er año; desde el 2do año se suma 1 día adicional por cada año (N-1)
+    const diasAdicionales = Math.min(Math.max(anosServicio - 1, 0), 15); // Tope LOTTT: máx. 15 adicionales
+    const totalDias = diasBase + diasAdicionales;
+    return {
+      dias: totalDias,
+      base: 'LOT',
+      detalle: `15 + ${diasAdicionales} (${anosServicio} años serv.) = ${totalDias} días hábiles`
+    };
+  } else {
+    // PUNTO DE CUENTA CVM: 30 días hábiles fijos
+    return {
+      dias: 30,
+      base: 'P/C CVM',
+      detalle: '30 días hábiles (Punto de Cuenta CVM)'
+    };
+  }
+}
+
+// ══════════════ NAVIGATION ══════════════
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  event.target.classList.add('active');
+  if (id === 'dashboard') renderDashboard();
+  if (id === 'vacaciones') renderVacaciones();
+  if (id === 'reposos') renderReposos();
+  if (id === 'historial') renderHistorial();
+  if (id === 'calendario') renderCalendario();
+}
+
+// ══════════════ VACACIONES DATA ══════════════
+function loadVacacionesData(data) {
+  vacacionesData = data;
+  // Marcar registros originales
+  vacacionesData.forEach(r => r._original = true);
+  // Enriquecer con datos de nómina (tipo de personal + fecha de ingreso actualizada)
+  vacacionesData.forEach(r => {
+    const info = nominaLookup[r.c];
+    if (info) {
+      r.tp = info.t || ''; // tipo de personal
+      if (info.i && info.i.trim()) r.i = info.i; // actualizar fecha de ingreso desde nómina
+    }
+  });
+  // Restaurar ediciones manuales desde localStorage
+  cargarEdicionesData();
+  // Restaurar registros nuevos agregados desde solicitudes
+  cargarNuevosRegistros();
+  // Actualizar estados automáticamente según fechas
+  actualizarEstadosAutomaticos();
+  // Guardar en localStorage y Firebase para que sobreviva al F5
+  saveVacacionesData();
+  renderVacaciones();
+  renderDashboard();
+}
+
+function cargarNuevosRegistros() {
+  function mergeNuevos(nuevos) {
+    let changed = false;
+    nuevos.forEach(nr => {
+      // Buscar si ya existe este registro (misma cédula + mismo período)
+      const existeIdx = vacacionesData.findIndex(r => r.c === nr.c && r.up === nr.up);
+      if (existeIdx >= 0) {
+        // Si el existente es original y el nuevo tiene datos de solicitud, actualizar observaciones
+        if (vacacionesData[existeIdx]._original && nr._solId) {
+          vacacionesData[existeIdx].o = nr.o;
+          vacacionesData[existeIdx]._solId = nr._solId;
+          vacacionesData[existeIdx]._estado = nr._estado;
+          changed = true;
+        }
+      } else {
+        nr._nuevo = true;
+        vacacionesData.push(nr);
+        changed = true;
+      }
+    });
+    return changed;
+  }
+
+  // Desde localStorage
+  try {
+    const nuevos = JSON.parse(localStorage.getItem('ghu_vacaciones_nuevos') || '[]');
+    mergeNuevos(nuevos);
+  } catch(e) {}
+
+  // Desde Firebase (asíncrono, actualiza al recibir)
+  if (firebaseOK && db) {
+    db.collection('vac_config').doc('vacaciones_nuevos').get().then(doc => {
+      if (doc.exists && doc.data().data) {
+        if (mergeNuevos(doc.data().data)) {
+          renderVacaciones();
+          renderDashboard();
+        }
+      }
+    }).catch(e => console.warn(e));
+  }
+}
+
+function renderVacaciones() {
+  const tbody = document.getElementById('tbody-vac');
+  const search = document.getElementById('search-vac').value.toLowerCase();
+  const sede = document.getElementById('filter-sede').value;
+  const nivel = document.getElementById('filter-vencidas').value;
+  const tipoP = (document.getElementById('filter-tipo-personal') || {}).value || '';
+
+  let filtered = vacacionesData.filter(r => {
+    if (search && !r.n.toLowerCase().includes(search) && !r.c.includes(search)) return false;
+    if (sede && r.u !== sede) return false;
+    if (tipoP && (r.tp || '') !== tipoP) return false;
+    const tv = parseInt(r.tv) || 0;
+    if (nivel === 'critico' && tv < 8) return false;
+    if (nivel === 'alto' && (tv < 5 || tv >= 8)) return false;
+    if (nivel === 'medio' && (tv < 3 || tv >= 5)) return false;
+    if (nivel === 'bajo' && (tv < 1 || tv >= 3)) return false;
+    return true;
+  });
+
+  document.getElementById('count-vac').textContent = filtered.length;
+
+  // Detectar duplicados: cédula + período repetido
+  const contadorCedulaPeriodo = {};
+  vacacionesData.forEach(r => {
+    const upV = parseInt(r.up) || 0;
+    const per = (r.pp && r.pp.trim()) ? r.pp : (upV > 0 ? (upV + 1) + '-' + (upV + 2) : '');
+    const key = r.c + '|' + per;
+    contadorCedulaPeriodo[key] = (contadorCedulaPeriodo[key] || 0) + 1;
+  });
+
+  tbody.innerHTML = filtered.slice(0, 500).map((r, i) => {
+    const tv = parseInt(r.tv) || 0;
+    let badge = '';
+    if (tv >= 8) badge = '<span class="badge badge-danger">Crítico</span>';
+    else if (tv >= 5) badge = '<span class="badge badge-warn">Alto</span>';
+    else if (tv >= 3) badge = '<span class="badge badge-info">Medio</span>';
+    else badge = '<span class="badge badge-ok">Bajo</span>';
+
+    // Badge de duplicado
+    const upV2 = parseInt(r.up) || 0;
+    const perKey = (r.pp && r.pp.trim()) ? r.pp : (upV2 > 0 ? (upV2 + 1) + '-' + (upV2 + 2) : '');
+    const dupKey = r.c + '|' + perKey;
+    const esDuplicado = perKey && (contadorCedulaPeriodo[dupKey] || 0) > 1;
+    const dupBadge = esDuplicado ? '<span class="badge" style="background:#FDE8E8;color:#C00000;border:1px solid #E6A0A0;font-size:10px;margin-left:4px;" title="Registro duplicado: misma cédula y período">⚠️ DUPLICADO</span>' : '';
+
+    const calc = calcularDiasVacaciones(r);
+    const baseBadge = calc.base === 'LOT'
+      ? '<span class="badge badge-warn" title="'+calc.detalle+'">LOT</span>'
+      : calc.base === 'P/C CVM'
+        ? '<span class="badge badge-info" title="'+calc.detalle+'">P/C CVM</span>'
+        : '';
+
+    const ubShort = r.u.replace('PIM III - ', '');
+    const procesado = r._procesado;
+    const trStyle = procesado ? ' style="opacity:0.5;text-decoration:line-through;"' : '';
+    const estadoBadge = procesado ? '<span class="badge badge-ok">Procesado</span>' : '';
+    // Mostrar periodo completo: usar pp si existe, sino construir desde up
+    const upVal = parseInt(r.up) || 0;
+    const periodoDisplay = (r.pp && r.pp.trim()) ? r.pp : (upVal > 0 ? (upVal+1) + '-' + (upVal+2) : '');
+    // Último período disfrutado: el anterior al primer período pendiente del trabajador
+    // Validado contra fecha de ingreso para no mostrar períodos imposibles
+    const regsDelTrab = vacacionesData.filter(x => x.c === r.c && x.up && parseInt(x.up) > 0);
+    let ultDisfrutado = '';
+    if (regsDelTrab.length > 0) {
+      // Obtener año de ingreso del trabajador
+      const fIngreso = parseFechaFlexible(r.i);
+      const anioIngreso = fIngreso ? fIngreso.getFullYear() : null;
+      // Registros con período pendiente (pp) = secuencia actual de vacaciones vencidas
+      const regsConPP = regsDelTrab.filter(x => x.pp && x.pp.trim());
+      let upRef;
+      if (regsConPP.length > 0) {
+        const minUpConPP = Math.min(...regsConPP.map(x => parseInt(x.up)));
+        upRef = minUpConPP;
+      } else {
+        upRef = Math.max(...regsDelTrab.map(x => parseInt(x.up))) + 1;
+      }
+      // Validar: el período disfrutado (upRef-1 a upRef) no puede ser anterior al año de ingreso
+      if (anioIngreso && (upRef - 1) < anioIngreso) {
+        ultDisfrutado = ''; // No ha disfrutado aún — ingresó después de ese período
+      } else {
+        ultDisfrutado = (upRef - 1) + '-' + upRef;
+      }
+    }
+    // Índice real en vacacionesData para editar
+    const realIdx = vacacionesData.indexOf(r);
+    const dupStyle = esDuplicado && !r._procesado ? ' style="background:#FFF3F3;"' : '';
+    // Tipo de personal (abreviado para la tabla)
+    const tipoPersonal = r.tp || '';
+    const tipoAbrev = tipoPersonal === 'DIRECCIÓN Y CONFIANZA' ? 'D&C'
+      : tipoPersonal === 'CONTRATADOS' ? 'CONTR.'
+      : tipoPersonal === 'OPERATIVOS' ? 'OPER.'
+      : tipoPersonal === 'EMPLEADOS' ? 'EMPL.'
+      : tipoPersonal || '—';
+    const tipoBadgeColor = tipoPersonal === 'DIRECCIÓN Y CONFIANZA' ? '#7030A0'
+      : tipoPersonal === 'CONTRATADOS' ? '#ED7D31'
+      : tipoPersonal === 'OPERATIVOS' ? '#2E75B6'
+      : tipoPersonal === 'EMPLEADOS' ? '#548235'
+      : '#999';
+    const tipoBadgeHtml = tipoPersonal ? `<span class="badge" style="background:${tipoBadgeColor}15;color:${tipoBadgeColor};border:1px solid ${tipoBadgeColor}50;" title="${tipoPersonal}">${tipoAbrev}</span>` : '<span style="color:#ccc;">—</span>';
+    return `<tr${trStyle || dupStyle}>
+      <td>${i+1}</td>
+      <td>${r.c}</td>
+      <td><strong>${r.n}</strong></td>
+      <td>${r.g}</td>
+      <td class="text-center">${tipoBadgeHtml}</td>
+      <td class="text-center" style="font-size:11px;">${r.i || '<span style="color:#ccc;">—</span>'}</td>
+      <td class="text-center" style="color:#548235;font-weight:bold;">${ultDisfrutado}</td>
+      <td class="text-center">${periodoDisplay}${dupBadge}</td>
+      <td class="text-center"><strong>${r.tv}</strong></td>
+      <td class="text-center" title="${calc.detalle}"><strong>${calc.dias}</strong></td>
+      <td class="text-center">${baseBadge}</td>
+      <td>${ubShort}</td>
+      <td>${procesado ? estadoBadge : badge}</td>
+      <td class="text-center">${r._estado === 'COMPLETADA' ? '<span class="badge badge-ok">COMPLETADA</span>'
+        : r._estado === 'APROBADA' ? '<span class="badge badge-info">APROBADA</span>'
+        : r._estado === 'EN DISFRUTE' ? '<span class="badge" style="background:#E8F0FE;color:#1F4E79;border:1px solid #9DC3E6;">EN DISFRUTE</span>'
+        : r._estado === 'PENDIENTE' ? '<span class="badge badge-warn">PENDIENTE</span>'
+        : '<span style="color:#ccc;">—</span>'}</td>
+      <td style="white-space:nowrap;">
+        ${isAdmin ? `<button class="btn btn-sm" style="background:#E8F0FE;color:#1F4E79;border:1px solid #9DC3E6;margin-right:4px;" onclick="editarTrabajador(${realIdx})" title="Editar datos">✏️</button><button class="btn btn-sm" style="background:#FDE8E8;color:#C00000;border:1px solid #E6A0A0;margin-right:4px;" onclick="eliminarRegistroVacaciones(${realIdx})" title="Eliminar registro">🗑️</button>${procesado ? '<span style="color:#548235;font-weight:bold;">✓</span>' : '<button class="btn btn-primary btn-sm" onclick="crearSolicitudDesdeData(\''+r.c+'\')">Solicitar</button>'}` : ''}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function filterVacaciones() { renderVacaciones(); }
+
+function crearSolicitudDesdeData(cedula) {
+  showPage('solicitud');
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav-tab')[2].classList.add('active');
+  document.getElementById('sol-cedula').value = cedula;
+  buscarTrabajador();
+}
+
+// ══════════════ EDITAR TRABAJADOR ══════════════
+function editarTrabajador(idx) {
+  const r = vacacionesData[idx];
+  if (!r) return;
+  document.getElementById('edit-idx').value = idx;
+  document.getElementById('edit-cedula').value = r.c;
+  document.getElementById('edit-nombre').value = r.n || '';
+  document.getElementById('edit-cargo').value = r.g || '';
+  document.getElementById('edit-ingreso').value = r.i || '';
+  document.getElementById('edit-ubicacion').value = r.u || 'PIM III - Planta Choco';
+  document.getElementById('edit-up').value = r.up || '';
+  document.getElementById('edit-pp').value = r.pp || '';
+  document.getElementById('edit-tv').value = r.tv || '';
+  document.getElementById('edit-obs').value = r.o || '';
+  document.getElementById('modal-editar').classList.add('show');
+}
+
+function guardarEdicion() {
+  const idx = parseInt(document.getElementById('edit-idx').value);
+  const r = vacacionesData[idx];
+  if (!r) return;
+  r.n = document.getElementById('edit-nombre').value.trim();
+  r.g = document.getElementById('edit-cargo').value.trim();
+  r.i = document.getElementById('edit-ingreso').value.trim();
+  r.u = document.getElementById('edit-ubicacion').value;
+  r.up = document.getElementById('edit-up').value.trim();
+  r.pp = document.getElementById('edit-pp').value.trim();
+  r.tv = document.getElementById('edit-tv').value.trim();
+  r.o = document.getElementById('edit-obs').value.trim();
+  r._editado = true; // Marcar como editado para guardar por cédula
+  // Guardar ediciones en localStorage
+  guardarEdicionesData();
+  saveVacacionesData();
+  closeModal('modal-editar');
+  renderVacaciones();
+  renderDashboard();
+  alert('Datos actualizados correctamente.');
+}
+
+function eliminarRegistroVacaciones(idx) {
+  const r = vacacionesData[idx];
+  if (!r) return;
+  const msg = '¿Está seguro de eliminar este registro?\n\n' +
+    'Cédula: ' + r.c + '\n' +
+    'Nombre: ' + r.n + '\n' +
+    'Período: ' + (r.pp || r.up || 'N/A') + '\n\n' +
+    'Esta acción no se puede deshacer.';
+  if (!confirm(msg)) return;
+  vacacionesData.splice(idx, 1);
+  guardarEdicionesData();
+  saveVacacionesData();
+  renderVacaciones();
+  renderDashboard();
+  alert('Registro eliminado correctamente.');
+}
+
+function guardarEdicionesData() {
+  try {
+    // Guardar SOLO los registros que fueron editados manualmente, indexados por cédula+período
+    const ediciones = {};
+    vacacionesData.forEach(r => {
+      if (r._editado) {
+        const key = r.c + '|' + (r.up || '');
+        ediciones[key] = { c: r.c, n: r.n, g: r.g, i: r.i, u: r.u, up: r.up, pp: r.pp, tv: r.tv, o: r.o };
+      }
+    });
+    localStorage.setItem('ghu_vacaciones_ediciones_v2', JSON.stringify(ediciones));
+    // Limpiar formato viejo que causaba corrupción
+    localStorage.removeItem('ghu_vacaciones_ediciones');
+    // Sincronizar con Firebase
+    if (firebaseOK && db) {
+      db.collection('vac_config').doc('vacaciones_ediciones_v2').set({ data: ediciones }).catch(e => console.warn(e));
+      // Limpiar documentos viejos
+      db.collection('vac_config').doc('vacaciones_ediciones').delete().catch(() => {});
+    }
+  } catch(e) { console.warn('Error guardando ediciones:', e); }
+}
+
+function cargarEdicionesData() {
+  // Limpiar formato viejo que causa corrupción de datos (sobreescribia por índice)
+  try { localStorage.removeItem('ghu_vacaciones_ediciones'); } catch(e) {}
+
+  // Cargar formato nuevo v2 (indexado por cédula+período)
+  try {
+    const ediciones = JSON.parse(localStorage.getItem('ghu_vacaciones_ediciones_v2') || '{}');
+    if (typeof ediciones === 'object' && !Array.isArray(ediciones)) {
+      Object.keys(ediciones).forEach(key => {
+        const ed = ediciones[key];
+        const reg = vacacionesData.find(r => r.c === ed.c && (r.up || '') === (ed.up || ''));
+        if (reg) {
+          reg.n = ed.n;
+          reg.g = ed.g;
+          reg.i = ed.i;
+          reg.u = ed.u;
+          reg.up = ed.up;
+          reg.pp = ed.pp;
+          reg.tv = ed.tv;
+          reg.o = ed.o;
+          reg._editado = true;
+        }
+      });
+    }
+  } catch(e) {}
+
+  // También cargar desde Firebase v2
+  if (firebaseOK && db) {
+    db.collection('vac_config').doc('vacaciones_ediciones_v2').get().then(doc => {
+      if (doc.exists && doc.data().data) {
+        const ediciones = doc.data().data;
+        let changed = false;
+        Object.keys(ediciones).forEach(key => {
+          const ed = ediciones[key];
+          const reg = vacacionesData.find(r => r.c === ed.c && (r.up || '') === (ed.up || ''));
+          if (reg) {
+            reg.n = ed.n; reg.g = ed.g; reg.i = ed.i; reg.u = ed.u;
+            reg.up = ed.up; reg.pp = ed.pp; reg.tv = ed.tv; reg.o = ed.o;
+            reg._editado = true;
+            changed = true;
+          }
+        });
+        if (changed) { renderVacaciones(); renderDashboard(); }
+      }
+    }).catch(e => console.warn(e));
+    // Limpiar documento viejo de Firebase
+    db.collection('vac_config').doc('vacaciones_ediciones').delete().catch(() => {});
+  }
+}
+
+// ══════════════ SOLICITUD ══════════════
+function buscarTrabajador() {
+  const cedula = document.getElementById('sol-cedula').value.replace(/\D/g, '');
+  if (cedula.length < 4) return;
+  // Buscar TODOS los registros (periodos vencidos) de esta cédula
+  const allRecords = vacacionesData.filter(r => r.c === cedula);
+  if (allRecords.length === 0) return;
+  // Filtrar los que tienen up (último periodo) con valor — son los periodos vencidos
+  const conUP = allRecords.filter(r => r.up && r.up.trim() && parseInt(r.up) > 0);
+  // Tomar el periodo MÁS ANTIGUO primero (up más bajo) — se toman en orden cronológico
+  let found;
+  if (conUP.length > 0) {
+    found = conUP.reduce((oldest, r) => {
+      const up = parseInt(r.up) || 9999;
+      const oldestUp = parseInt(oldest.up) || 9999;
+      return up < oldestUp ? r : oldest;
+    }, conUP[0]);
+  } else {
+    found = allRecords[0];
+  }
+  if (found) {
+    document.getElementById('sol-nombre').value = found.n;
+    document.getElementById('sol-cargo').value = found.g;
+    document.getElementById('sol-ingreso').value = found.i;
+    document.getElementById('sol-ubicacion').value = found.u || 'PIM III - Planta Choco';
+    // Auto-llenar sueldo mensual desde nómina (salario básico × 2)
+    if (sueldoData[cedula]) {
+      document.getElementById('sol-sueldo').value = sueldoData[cedula].toFixed(2);
+    }
+    // Auto-calcular días según regla LOT / Punto de Cuenta CVM
+    const calc = calcularDiasVacaciones(found);
+    // Guardar días en variable global para que calcularDias() los use directamente
+    _diasCalculados = calc.dias;
+    _baseCalculada = calc.base;
+    // Determinar periodo: usar up del registro, o el calculado por calcularDiasVacaciones
+    const upVal = parseInt(found.up) || (found._upCalc || 0);
+    // Periodo solicitado (el que se va a disfrutar)
+    let periodoSolicitado = '';
+    if (upVal > 0) {
+      periodoSolicitado = upVal + '-' + (upVal+1);
+      document.getElementById('sol-periodo').value = periodoSolicitado;
+    }
+    // Periodo pendiente: SIEMPRE es el periodo SIGUIENTE al solicitado
+    if (periodoSolicitado) {
+      const partes = periodoSolicitado.split('-');
+      const finPeriodo = parseInt(partes[1]);
+      if (finPeriodo > 0) {
+        document.getElementById('sol-periodo-pend').value = finPeriodo + '-' + (finPeriodo+1);
+      }
+    }
+    // Total periodos vencidos
+    const totalVencidos = conUP.length;
+    document.getElementById('sol-dias').value = calc.dias + ' DÍAS HÁBILES (' + calc.base + ')';
+    // Mostrar info de base legal + periodos vencidos
+    const infoEl = document.getElementById('sol-base-info');
+    if (infoEl) {
+      let info = calc.detalle;
+      if (totalVencidos > 1) info += ' — ' + totalVencidos + ' períodos vencidos pendientes';
+      infoEl.textContent = info;
+    }
+  }
+}
+
+function buscarTrabajadorReposo() {
+  const cedula = document.getElementById('rep-cedula').value.replace(/\D/g, '');
+  if (cedula.length < 4) return;
+  const allRec = vacacionesData.filter(r => r.c === cedula);
+  if (allRec.length === 0) return;
+  const found = allRec.reduce((best, r) => {
+    const up = parseInt(r.up) || 0;
+    const bestUp = parseInt(best.up) || 0;
+    return up > bestUp ? r : best;
+  }, allRec[0]);
+  if (found) {
+    document.getElementById('rep-nombre').value = found.n;
+    // Intentar determinar la unidad de adscripción desde la ubicación del trabajador
+    const ubicTrab = (found.u || '').toUpperCase();
+    let unidadAuto = '';
+    if (ubicTrab.includes('ISIDORA')) unidadAuto = 'Gerencia de Mina';
+    else if (ubicTrab.includes('CHOCO') || ubicTrab.includes('PLANTA')) unidadAuto = 'Gerencia de Planta';
+    document.getElementById('rep-unidad').value = unidadAuto;
+    const ub = (found.u || '').replace('PIM III - ','').toUpperCase();
+    if (ub.includes('ISIDORA')) document.getElementById('rep-ubicacion').value = 'MINA ISIDORA';
+    else document.getElementById('rep-ubicacion').value = 'PLANTA CHOCÓ';
+  }
+}
+
+// Variable global para guardar los días calculados por buscarTrabajador
+let _diasCalculados = 0;
+let _baseCalculada = '';
+
+function formatFecha(date) {
+  // Formatear fecha como YYYY-MM-DD de forma segura (sin toISOString que puede dar problemas de zona horaria)
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + d;
+}
+
+function parseFechaInput(val) {
+  // Parsear valor de input date (YYYY-MM-DD) de forma segura
+  if (!val) return null;
+  const parts = val.split('-');
+  if (parts.length !== 3) return null;
+  const y = parseInt(parts[0]), m = parseInt(parts[1]) - 1, d = parseInt(parts[2]);
+  if (isNaN(y) || isNaN(m) || isNaN(d) || y < 2000) return null;
+  return new Date(y, m, d, 12, 0, 0);
+}
+
+let _calculandoDias = false; // Evitar loops por onchange de sol-hasta
+function calcularDias() {
+  if (_calculandoDias) return;
+  _calculandoDias = true;
+  try {
+    const desde = document.getElementById('sol-desde').value;
+    const hasta = document.getElementById('sol-hasta').value;
+
+    if (desde && !hasta) {
+      // Usar los días guardados por buscarTrabajador
+      const diasHabiles = _diasCalculados;
+      if (diasHabiles <= 0) return;
+      const cur = parseFechaInput(desde);
+      if (!cur) return;
+      // Asegurar que "desde" caiga en día hábil (excl. feriados)
+      while (!esDiaHabil(cur)) cur.setDate(cur.getDate() + 1);
+      let count = 1; // el primer día hábil ya cuenta
+      while (count < diasHabiles) {
+        cur.setDate(cur.getDate() + 1);
+        if (esDiaHabil(cur)) count++;
+      }
+      // "hasta" es el último día hábil de disfrute
+      document.getElementById('sol-hasta').value = formatFecha(cur);
+      // "reintegro" es el siguiente día hábil después de "hasta"
+      const reint = new Date(cur);
+      reint.setDate(reint.getDate() + 1);
+      while (!esDiaHabil(reint)) reint.setDate(reint.getDate() + 1);
+      document.getElementById('sol-reintegro').value = formatFecha(reint);
+    } else if (desde && hasta) {
+      // Si tiene ambas fechas, calcular los días hábiles entre ellas (excl. feriados)
+      const d1 = parseFechaInput(desde), d2 = parseFechaInput(hasta);
+      if (!d1 || !d2 || d2 < d1) return;
+      let dias = 0, cur = new Date(d1);
+      while (cur <= d2) {
+        if (esDiaHabil(cur)) dias++;
+        cur.setDate(cur.getDate() + 1);
+      }
+      document.getElementById('sol-dias').value = dias + ' DÍAS HÁBILES' + (_baseCalculada ? ' (' + _baseCalculada + ')' : '');
+      // Auto set reintegro (siguiente día hábil)
+      const reint = new Date(d2);
+      reint.setDate(reint.getDate() + 1);
+      while (!esDiaHabil(reint)) reint.setDate(reint.getDate() + 1);
+      document.getElementById('sol-reintegro').value = formatFecha(reint);
+    }
+  } finally {
+    _calculandoDias = false;
+  }
+}
+
+function guardarSolicitud() {
+  const sol = {
+    id: nuevoId(),
+    tipo: 'VACACIONES',
+    fecha: document.getElementById('sol-fecha').value || new Date().toISOString().split('T')[0],
+    cedula: document.getElementById('sol-cedula').value,
+    nombre: document.getElementById('sol-nombre').value,
+    cargo: document.getElementById('sol-cargo').value,
+    ingreso: document.getElementById('sol-ingreso').value,
+    unidad: document.getElementById('sol-unidad').value,
+    unidadAdmin: document.getElementById('sol-unidad-admin').value,
+    condicion: document.getElementById('sol-condicion').value,
+    ubicacion: document.getElementById('sol-ubicacion').value,
+    sueldo: document.getElementById('sol-sueldo').value,
+    periodo: document.getElementById('sol-periodo').value,
+    periodoPend: document.getElementById('sol-periodo-pend').value,
+    desde: document.getElementById('sol-desde').value,
+    hasta: document.getElementById('sol-hasta').value,
+    dias: document.getElementById('sol-dias').value,
+    reintegro: document.getElementById('sol-reintegro').value,
+    obs: document.getElementById('sol-obs').value,
+    supervisor: document.getElementById('sol-supervisor').value,
+    gerente: document.getElementById('sol-gerente').value,
+    coordGH: document.getElementById('sol-coord-gh').value,
+    gerenteGH: document.getElementById('sol-gerente-gh').value,
+    coordBS: document.getElementById('sol-coord-bs').value,
+    comision: document.getElementById('sol-comision').value,
+    estado: calcularEstadoAutomatico(document.getElementById('sol-desde').value, document.getElementById('sol-hasta').value)
+  };
+  if (!sol.cedula || !sol.nombre) { alert('Ingrese al menos cédula y nombre.'); return; }
+
+  // ── VALIDACIÓN DE DUPLICADOS Y PERÍODO CORRECTO ──
+  const cedulaLimpia = sol.cedula.replace(/\D/g, '');
+  const periodoSol = sol.periodo ? sol.periodo.trim() : '';
+
+  if (cedulaLimpia && periodoSol) {
+    // 1) Detectar duplicado: misma cédula + mismo período ya existe
+    const duplicados = vacacionesData.filter(r => {
+      if (r.c !== cedulaLimpia) return false;
+      const upR = parseInt(r.up) || 0;
+      const periodoR = upR > 0 ? (upR + 1) + '-' + (upR + 2) : (r.pp || '');
+      return periodoR === periodoSol || r.up === (periodoSol.match(/(\d{4})/) || [])[1];
+    });
+
+    if (duplicados.length > 0) {
+      const msgDup = '⚠️ ALERTA DE DUPLICADO\n\n' +
+        'Ya existe un registro para:\n' +
+        '• Cédula: ' + sol.cedula + '\n' +
+        '• Período: ' + periodoSol + '\n\n' +
+        'Registros encontrados: ' + duplicados.length + '\n\n' +
+        '¿Desea guardar de todas formas?\n' +
+        '(Se recomienda verificar antes de continuar)';
+      if (!confirm(msgDup)) return;
+    }
+
+    // 2) Validar que el período sea el siguiente esperado
+    const regsDelTrabajador = vacacionesData.filter(r => r.c === cedulaLimpia && r.up && parseInt(r.up) > 0);
+    if (regsDelTrabajador.length > 0) {
+      const periodosExistentes = regsDelTrabajador.map(r => parseInt(r.up)).filter(n => n > 0);
+      const maxPeriodo = Math.max(...periodosExistentes);
+      const periodoEsperado = maxPeriodo + 1;
+      const periodoSolYear = parseInt((periodoSol.match(/(\d{4})/) || [])[1]) || 0;
+
+      if (periodoSolYear > 0 && periodoSolYear !== periodoEsperado) {
+        const esperadoStr = periodoEsperado + '-' + (periodoEsperado + 1);
+        let msgPeriodo = '⚠️ ALERTA DE PERÍODO\n\n' +
+          'El período solicitado NO es el siguiente esperado:\n\n' +
+          '• Período solicitado: ' + periodoSol + '\n' +
+          '• Período esperado: ' + esperadoStr + '\n\n' +
+          'Períodos ya registrados para ' + sol.nombre + ':\n';
+        periodosExistentes.sort((a, b) => a - b).forEach(p => {
+          msgPeriodo += '  → ' + p + '-' + (p + 1) + '\n';
+        });
+        msgPeriodo += '\n¿Desea continuar con el período ' + periodoSol + '?';
+        if (!confirm(msgPeriodo)) return;
+      }
+    }
+  }
+
+  solicitudes.push(sol);
+  // Agregar registro a Vacaciones Vencidas
+  agregarAVacacionesVencidas(sol);
+  saveData();
+  alert('Solicitud #' + sol.id + ' guardada correctamente.');
+  renderVacaciones();
+  renderDashboard();
+}
+
+function anioDeIngreso(txt) {
+  if (!txt) return 0;
+  const p = String(txt).split(/[-\/]/);
+  if (p.length < 3) return 0;
+  return p[0].length === 4 ? parseInt(p[0]) : parseInt(p[2]);
+}
+
+// Extrae TODOS los períodos de un texto: "2017-2018/2018-2019" -> ["2017-2018","2018-2019"]
+function extraerPeriodos(txt) {
+  if (!txt) return [];
+  const m = String(txt).match(/\d{4}\s*[-–]\s*\d{4}/g);
+  if (m && m.length) return m.map(x => x.replace(/\s/g, ''));
+  const y = String(txt).match(/\d{4}/g);
+  return y ? y.map(a => a + '-' + (parseInt(a) + 1)) : [];
+}
+
+// Años vencidos = año actual menos el cierre del último período disfrutado
+function calcularAnosVencidos(upYear, ingreso) {
+  const hoy = new Date().getFullYear();
+  const base = parseInt(upYear) || 0;
+  if (base > 0) return String(Math.max(0, hoy - (base + 1)));
+  const yi = anioDeIngreso(ingreso);
+  if (!yi) return '';
+  const ant = hoy - yi;
+  return ant < 1 ? 'NO GENERA' : String(ant);
+}
+
+function agregarAVacacionesVencidas(sol) {
+  const cedula = (sol.cedula || '').replace(/\D/g, '');
+  if (!cedula) return;
+
+  const periodos = extraerPeriodos(sol.periodo);
+  const upYear = periodos.length ? String(Math.max(...periodos.map(p => parseInt(p.split('-')[0])))) : '';
+  const ppNuevo = upYear ? (parseInt(upYear) + 1) + '-' + (parseInt(upYear) + 2) : (sol.periodoPend || '');
+  const estadoTxt = sol.estado || 'PENDIENTE';
+  const detalle = (sol.desde ? 'Desde: ' + sol.desde + ' ' : '') + (sol.hasta ? 'Hasta: ' + sol.hasta : '');
+  const obsTxt = 'SOL #' + sol.id + ' - ' + estadoTxt + (detalle ? ' | ' + detalle : '');
+
+  // UNA SOLA FILA POR CÉDULA: buscar por cédula, no por período
+  let reg = vacacionesData.find(r => r.c === cedula);
+
+  if (!reg) {
+    reg = { c: cedula, n: sol.nombre || '', g: sol.cargo || '', i: sol.ingreso || '',
+            u: sol.ubicacion || sol.unidad || 'PIM III - Planta Choco', tp: sol.condicion || '' };
+    vacacionesData.push(reg);
+  }
+
+  // Acumular los períodos ya otorgados sin repetir
+  const yaOtorgados = extraerPeriodos(reg.po || '');
+  periodos.forEach(p => { if (yaOtorgados.indexOf(p) < 0) yaOtorgados.push(p); });
+  yaOtorgados.sort();
+
+  if (upYear) { reg.up = upYear; reg.pp = ppNuevo; }
+  reg.po = yaOtorgados.join(' / ');
+  reg.dOt = String(parseInt(reg.dOt || 0) + (parseInt(sol.dias) || 0));
+  reg.tv = calcularAnosVencidos(reg.up, reg.i || sol.ingreso);
+  reg.o = obsTxt;
+  reg._solId = sol.id;
+  reg._estado = estadoTxt;
+  reg._nuevo = true;
+
+  guardarNuevosRegistrosVacaciones();
+  saveVacacionesData();
+  renderVacaciones();
+}
+
+// Recalcular total de períodos vencidos para una cédula
+function recalcularTotalVencidos(cedula) {
+  vacacionesData.filter(r => r.c === cedula)
+    .forEach(r => { r.tv = calcularAnosVencidos(r.up, r.i); });
+}
+
+// Deja UNA sola fila por cédula y recalcula los vencidos de todos
+function unificarPorCedula() {
+  const mapa = {};
+  vacacionesData.forEach(r => {
+    const k = r.c;
+    if (!k) return;
+    const prev = mapa[k];
+    if (!prev) { mapa[k] = r; return; }
+    const gana = (parseInt(r.up) || 0) >= (parseInt(prev.up) || 0) ? r : prev;
+    const pierde = gana === r ? prev : r;
+    // conservar lo que traiga la fila descartada
+    ['po','dOt','o','_solId','_estado','i','tp','g','n','u'].forEach(f => {
+      if (!gana[f] && pierde[f]) gana[f] = pierde[f];
+    });
+    const todos = extraerPeriodos(gana.po || '').concat(extraerPeriodos(pierde.po || ''));
+    const unicos = todos.filter((v, idx) => todos.indexOf(v) === idx).sort();
+    if (unicos.length) gana.po = unicos.join(' / ');
+    mapa[k] = gana;
+  });
+  vacacionesData = Object.keys(mapa).map(k => mapa[k]);
+  vacacionesData.forEach(r => { r.tv = calcularAnosVencidos(r.up, r.i); });
+}
+
+// Sincronizar estado de solicitud con Vacaciones Vencidas
+function sincronizarEstadoConVacaciones(solId, nuevoEstado) {
+  const sol = solicitudes.find(s => s.id === solId);
+  if (!sol) return;
+  const cedula = (sol.cedula || '').replace(/\D/g, '');
+  let upYear = '';
+  if (sol.periodo) {
+    const match = sol.periodo.match(/(\d{4})/);
+    if (match) upYear = match[1];
+  }
+  // Buscar el registro correspondiente en vacacionesData
+  const reg = vacacionesData.find(r => r.c === cedula && (r.up === upYear || r._solId === solId));
+  if (reg) {
+    reg._estado = nuevoEstado;
+    const detalle = (sol.desde ? 'Desde: ' + sol.desde + ' ' : '') + (sol.hasta ? 'Hasta: ' + sol.hasta : '');
+    reg.o = 'SOL #' + solId + ' - ' + nuevoEstado + (detalle ? ' | ' + detalle : '');
+    if (!reg._original) reg._nuevo = true;
+    guardarNuevosRegistrosVacaciones();
+    saveVacacionesData();
+    renderVacaciones();
+  }
+}
+
+// Unificación MANUAL: solo corre cuando el usuario aprieta el botón
+function unificarDuplicadosManual() {
+  const ceds = vacacionesData.map(r => r.c);
+  const dup = ceds.length - new Set(ceds).size;
+  if (dup === 0) { alert('No hay cédulas repetidas. No hay nada que unificar.'); return; }
+
+  const aviso = 'UNIFICAR DUPLICADOS\n\n' +
+    'Registros actuales: ' + vacacionesData.length + '\n' +
+    'Filas con cedula repetida: ' + dup + '\n' +
+    'Quedarian: ' + new Set(ceds).size + ' trabajadores\n\n' +
+    'Esta accion tambien recalcula los anos vencidos de TODOS los registros ' +
+    'y reemplaza cualquier valor corregido a mano.\n\n' +
+    'Descargue el Excel antes de continuar.\n\n' +
+    'Desea continuar?';
+  if (!confirm(aviso)) return;
+  if (!confirm('Confirme una vez mas. Esta accion no se puede deshacer.')) return;
+
+  const antes = vacacionesData.length;
+  unificarPorCedula();
+  saveVacacionesData();
+  renderVacaciones();
+  renderDashboard();
+  alert('Listo.\n\n' + (antes - vacacionesData.length) + ' filas duplicadas unificadas.\n' +
+        vacacionesData.length + ' trabajadores en la data.');
+}
+
+function guardarNuevosRegistrosVacaciones() {
+  // Marcar todos los no-originales como nuevos
+  vacacionesData.forEach(r => {
+    if (!r._original) r._nuevo = true;
+  });
+  // Serializar solo campos de datos (sin flags internos)
+  const todosNuevos = vacacionesData.filter(r => r._nuevo).map(r => ({
+    c: r.c, n: r.n, g: r.g, i: r.i, u: r.u, up: r.up, tv: r.tv, pp: r.pp, o: r.o,
+    _solId: r._solId || 0, _estado: r._estado || ''
+  }));
+  // Guardar en localStorage
+  try {
+    localStorage.setItem('ghu_vacaciones_nuevos', JSON.stringify(todosNuevos));
+  } catch(e) { console.warn('Error guardando en localStorage:', e); }
+  // Guardar en Firebase
+  if (firebaseOK && db) {
+    db.collection('vac_config').doc('vacaciones_nuevos').set({ data: todosNuevos }).catch(e => console.warn('Error guardando nuevos en Firebase:', e));
+  }
+}
+
+function limpiarSolicitud() {
+  _diasCalculados = 0;
+  _baseCalculada = '';
+  ['sol-cedula','sol-nombre','sol-cargo','sol-ingreso','sol-sueldo','sol-periodo','sol-periodo-pend','sol-desde','sol-hasta','sol-dias','sol-reintegro','sol-obs','sol-supervisor','sol-gerente','sol-gerente-gh','sol-coord-bs','sol-comision'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('sol-fecha').value = new Date().toISOString().split('T')[0];
+}
+
+function previsualizarSolicitud() {
+  const body = document.getElementById('modal-preview-body');
+  const fmt = d => { if (!d) return '___/___/______'; const p = d.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; };
+  const v = id => { const el = document.getElementById(id); return el ? (el.value || '').trim() : ''; };
+
+  // Observaciones auto-generadas como en los formularios reales del Excel
+  let obsText = v('sol-obs');
+  if (!obsText) {
+    const ingreso = v('sol-ingreso');
+    let mesI = '____________', anioI = '______';
+    if (ingreso) {
+      const mn = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+      const pp = ingreso.split('/');
+      if (pp.length === 3) { mesI = mn[parseInt(pp[1])-1] || mesI; anioI = pp[2]; }
+    }
+    const periodo = v('sol-periodo') || '____-____';
+    const dias = v('sol-dias') || '___';
+    const periodoPendFmt = v('sol-periodo-pend');
+    obsText = 'TOMARÁ EL PERIODO ' + periodo + ' POR ' + dias + ' DÍAS HÁBILES DE DISFRUTE' + (periodoPendFmt ? '. PERÍODO PENDIENTE: ' + periodoPendFmt : '');
+  }
+
+  // Condición checkboxes exactas del Excel (R14-R18: DyC, Comisión, Empleado, Operativo, Contratado)
+  const cond = v('sol-condicion').toUpperCase();
+  const X = val => cond === val ? 'X' : '&nbsp;';
+
+  // Fecha solicitud desglosada (día/mes/año como en Excel R3: C23=día, C26=mes, C29=año)
+  const fSol = v('sol-fecha');
+  let diaS='', mesS='', anioS='';
+  if (fSol) { const p=fSol.split('-'); diaS=p[2]; mesS=p[1]; anioS=p[0]; }
+
+  // Desde/Hasta desglosados (R23: C14-15=día, C16-17=mes, C18-19=año)
+  const fDesde = v('sol-desde'), fHasta = v('sol-hasta');
+  let dD='',mD='',aD='',dH='',mH='',aH='';
+  if (fDesde){const p=fDesde.split('-');dD=p[2];mD=p[1];aD=p[0];}
+  if (fHasta){const p=fHasta.split('-');dH=p[2];mH=p[1];aH=p[0];}
+
+  // Reintegro desglosado
+  const fReint = v('sol-reintegro');
+  let dR='',mR='',aR='';
+  if (fReint){const p=fReint.split('-');dR=p[2];mR=p[1];aR=p[0];}
+
+  body.innerHTML = `<div class="solicitud" id="solicitud-print">
+  <table class="ft">
+    <colgroup>
+      <col style="width:3.2%"><col style="width:3.2%"><col style="width:3.2%"><col style="width:3.2%">
+      <col style="width:3.2%"><col style="width:3.2%"><col style="width:3.2%"><col style="width:3.2%">
+      <col style="width:3.2%"><col style="width:3.4%"><col style="width:3.3%"><col style="width:3.2%">
+      <col style="width:3.2%"><col style="width:2.8%"><col style="width:3.2%"><col style="width:3.2%">
+      <col style="width:3.2%"><col style="width:3.2%"><col style="width:3.2%"><col style="width:3.8%">
+      <col style="width:3.2%"><col style="width:3.2%"><col style="width:3.2%"><col style="width:3.3%">
+      <col style="width:3.2%"><col style="width:3.4%"><col style="width:3.0%"><col style="width:3.0%">
+      <col style="width:3.0%"><col style="width:3.0%"><col style="width:3.0%"><col style="width:3.2%">
+    </colgroup>
+
+    <!-- R0-R2: BANNER INSTITUCIONAL (réplica exacta del Excel) -->
+    <tr>
+      <td colspan="32" class="nb" style="background:#A6A6A6;padding:0;height:55px;">
+        <div style="display:flex;align-items:center;height:55px;padding:0 8px;">
+          <div style="flex:0 0 auto;padding-right:8px;">
+            <img src="data:image/png;base64,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" style="height:40px;" alt="República">
+          </div>
+          <div style="flex:0 0 auto;padding-right:15px;border-right:2px solid rgba(0,0,0,0.3);">
+            <img src="data:image/png;base64,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" style="height:38px;" alt="CVM">
+          </div>
+          <div style="flex:1;text-align:center;padding-left:15px;">
+            <span style="font-size:20px;font-style:italic;font-weight:bold;color:#000;letter-spacing:2px;">SOLICITUD DE VACACIONES</span>
+          </div>
+        </div>
+      </td>
+    </tr>
+
+    <!-- R3: 1. FECHA DE SOLICITUD -->
+    <tr style="height:16px;">
+      <td colspan="23" rowspan="2" class="ctr" style="font-size:13px;font-weight:bold;border-right:1px solid #000;vertical-align:middle;">
+        OFICINA DE GESTIÓN HUMANA
+      </td>
+      <td colspan="9" class="lbl ctr" style="font-size:8.5px;">1. FECHA DE SOLICITUD:</td>
+    </tr>
+    <!-- R4: día / mes / año solicitud -->
+    <tr style="height:22px;">
+      <td colspan="3" class="val ctr" style="font-size:11px;">${diaS}</td>
+      <td colspan="3" class="val ctr" style="font-size:11px;">${mesS}</td>
+      <td colspan="3" class="val ctr" style="font-size:11px;">${anioS}</td>
+    </tr>
+
+    <!-- R5: I. DATOS DEL TRABAJADOR -->
+    <tr><td colspan="32" class="hdr">I. DATOS DEL TRABAJADOR O TRABAJADORA:</td></tr>
+
+    <!-- R6: 2. APELLIDOS Y NOMBRES | 3. CÉDULA | 4. FECHA INGRESO (labels) -->
+    <tr style="height:16px;">
+      <td class="lbl ctr">2.</td>
+      <td colspan="17" class="lbl">APELLIDOS Y NOMBRES</td>
+      <td class="lbl ctr">3.</td>
+      <td colspan="7" class="lbl">CÉDULA DE IDENTIDAD</td>
+      <td class="lbl ctr">4.</td>
+      <td colspan="5" class="lbl">FECHA DE INGRESO</td>
+    </tr>
+    <!-- R7: valores -->
+    <tr style="height:22px;">
+      <td colspan="18" class="val" style="font-size:10px;font-weight:bold;">${v('sol-nombre').toUpperCase()}</td>
+      <td colspan="8" class="val ctr" style="font-size:10px;">${v('sol-cedula')}</td>
+      <td colspan="6" class="val ctr">${v('sol-ingreso')}</td>
+    </tr>
+
+    <!-- R8: 5. CARGO | 6. SUELDO (labels) -->
+    <tr style="height:16px;">
+      <td class="lbl ctr">5.</td>
+      <td colspan="22" class="lbl">CARGO</td>
+      <td class="lbl ctr">6.</td>
+      <td colspan="8" class="lbl">SUELDO NORMAL MENSUAL</td>
+    </tr>
+    <!-- R9: valores -->
+    <tr style="height:20px;">
+      <td colspan="23" class="val" style="font-size:10px;">${v('sol-cargo').toUpperCase()}</td>
+      <td colspan="9" class="val">${v('sol-sueldo') ? 'Bs. '+v('sol-sueldo') : ''}</td>
+    </tr>
+
+    <!-- R10: 7. UNIDAD ADSCRIPCIÓN | 8. UNIDAD ADMINISTRATIVA (labels) -->
+    <tr style="height:16px;">
+      <td class="lbl ctr">7.</td>
+      <td colspan="15" class="lbl">UNIDAD DE ADSCRIPCIÓN</td>
+      <td class="lbl ctr">8.</td>
+      <td colspan="15" class="lbl">UNIDAD ADMINISTRATIVA</td>
+    </tr>
+    <!-- R11: valores -->
+    <tr style="height:20px;">
+      <td colspan="16" class="val">${v('sol-unidad').toUpperCase()}</td>
+      <td colspan="16" class="val">${v('sol-unidad-admin').toUpperCase()}</td>
+    </tr>
+
+    <!-- R12: 9. CONDICION DE CONTRATACIÓN (label) -->
+    <tr style="height:16px;">
+      <td class="lbl ctr">9.</td>
+      <td colspan="31" class="lbl">CONDICION DE CONTRATACIÓN</td>
+    </tr>
+    <!-- R13: espacio -->
+    <tr style="height:4px;"><td colspan="32" style="border-left:1px solid #000;border-right:1px solid #000;border-top:none;border-bottom:none;"></td></tr>
+    <!-- R14: DIRECCIÓN Y CONFIANZA | COMISIÓN DE SERVICIOS -->
+    <tr style="height:18px;">
+      <td colspan="13" style="border-bottom:none;"><span class="cx">${X('DIRECCION Y CONFIANZA')}</span> DIRECCIÓN Y CONFIANZA</td>
+      <td class="ctr" style="border-bottom:none;border-left:none;"></td>
+      <td colspan="15" style="border-bottom:none;"><span class="cx">${X('COMISIÓN DE SERVICIOS')}</span> COMISIÓN DE SERVICIOS Y/O APOYO INSTITUCIONAL</td>
+      <td colspan="3" style="border-bottom:none;border-left:none;"></td>
+    </tr>
+    <!-- R15: espacio -->
+    <tr style="height:4px;"><td colspan="32" style="border:1px solid #000;border-top:none;border-bottom:none;"></td></tr>
+    <!-- R16: EMPLEADO | OPERATIVO -->
+    <tr style="height:18px;">
+      <td colspan="13" style="border-top:none;border-bottom:none;"><span class="cx">${X('EMPLEADO')}</span> EMPLEADO</td>
+      <td class="ctr" style="border-top:none;border-bottom:none;border-left:none;"></td>
+      <td colspan="15" style="border-top:none;border-bottom:none;"><span class="cx">${X('OPERATIVO (OBRERO)')}</span> OPERATIVO (OBRERO)</td>
+      <td colspan="3" style="border-top:none;border-bottom:none;border-left:none;"></td>
+    </tr>
+    <!-- R17: espacio -->
+    <tr style="height:4px;"><td colspan="32" style="border:1px solid #000;border-top:none;border-bottom:none;"></td></tr>
+    <!-- R18: CONTRATADO -->
+    <tr style="height:18px;">
+      <td colspan="13" style="border-top:none;"><span class="cx">${X('CONTRATADO')}</span> CONTRATADO</td>
+      <td colspan="19" style="border-top:none;"></td>
+    </tr>
+
+    <!-- R20: II. VACACIONES -->
+    <tr><td colspan="32" class="hdr">II. VACACIONES</td></tr>
+
+    <!-- R21: 10. PERIODO DE DISFRUTE | 11. LAPSO | 12. FECHA REINTEGRO (labels) -->
+    <tr style="height:16px;">
+      <td colspan="14" class="lbl">10. PERIODO DE DISFRUTE</td>
+      <td colspan="12" class="lbl ctr">11. LAPSO DE VACACIONES</td>
+      <td class="lbl ctr" rowspan="2">12.</td>
+      <td colspan="5" class="lbl" rowspan="2" style="vertical-align:middle;">FECHA DE REINTEGRO:</td>
+    </tr>
+    <!-- R22: valor periodo | DESDE / HASTA sub-headers -->
+    <tr style="height:14px;">
+      <td colspan="14" rowspan="2" class="val ctr" style="font-weight:bold;font-size:11px;vertical-align:middle;">${v('sol-periodo')}${v('sol-periodo-pend') ? '<br><span style="font-size:8px;font-weight:normal;color:#555;">PENDIENTE: '+v('sol-periodo-pend')+'</span>' : ''}</td>
+      <td colspan="6" class="lbl ctr" style="background:#D9E2F3;">DESDE</td>
+      <td colspan="6" class="lbl ctr" style="background:#D9E2F3;">HASTA</td>
+    </tr>
+    <!-- R23: fechas desde/hasta desglosadas | reintegro -->
+    <tr style="height:22px;">
+      <td colspan="2" class="val ctr">${dD}</td>
+      <td colspan="2" class="val ctr">${mD}</td>
+      <td colspan="2" class="val ctr">${aD}</td>
+      <td colspan="2" class="val ctr">${dH}</td>
+      <td colspan="2" class="val ctr">${mH}</td>
+      <td colspan="2" class="val ctr">${aH}</td>
+      <td colspan="6" class="val ctr">${dR}/${mR}/${aR}</td>
+    </tr>
+
+    <!-- R24: 13. OBSERVACIONES -->
+    <tr>
+      <td class="lbl ctr">13.</td>
+      <td colspan="31" class="val" style="font-size:8.5px;line-height:1.3;padding:4px 5px;min-height:30px;">
+        <strong>OBSERVACIONES:</strong><br>${obsText}
+      </td>
+    </tr>
+
+    <!-- R25: espacio -->
+    <tr><td colspan="32" class="nb" style="height:3px;border:none;"></td></tr>
+
+    <!-- R26: III. SOLICITANTE + IV. AUTORIZACION header -->
+    <tr>
+      <td colspan="9" class="nb" style="border:none;"></td>
+      <td colspan="23" class="hdr">IV. AUTORIZACIÓN</td>
+    </tr>
+
+    <!-- R27-R30: 14. FIRMA TRABAJADOR | 15. SUPERVISOR | 16. GERENTE -->
+    <tr>
+      <td class="lbl ctr bb0">14.</td>
+      <td colspan="8" class="lbl bb0">FIRMA DEL TRABAJADOR:</td>
+      <td class="lbl ctr bb0">15.</td>
+      <td colspan="10" class="lbl bb0" style="font-size:8.5px;">NOMBRE Y APELLIDO DEL (LA) SUPERVISOR (A) INMEDIATO (A)</td>
+      <td class="lbl ctr bb0">16.</td>
+      <td colspan="11" class="lbl bb0" style="font-size:8.5px;">NOMBRE Y APELLIDO DEL (LA) GERENTE</td>
+    </tr>
+    <tr style="height:35px;">
+      <td colspan="9" rowspan="2" class="vb ctr" style="border-top:none;"></td>
+      <td colspan="11" rowspan="2" class="vb ctr" style="border-top:none;">
+        <div class="firma-name">${v('sol-supervisor')}</div>
+        <div class="firma-line">FIRMA Y SELLO</div>
+      </td>
+      <td colspan="12" rowspan="2" class="vb ctr" style="border-top:none;">
+        <div class="firma-name">${v('sol-gerente')}</div>
+        <div class="firma-line">FIRMA Y SELLO</div>
+      </td>
+    </tr>
+    <tr></tr>
+
+    <!-- R31-R34: 17. COORD GH/GO | 18. COORD BS | 19. GERENTE OFICINA GH -->
+    <tr>
+      <td class="lbl ctr bb0">17.</td>
+      <td colspan="8" class="lbl bb0" style="font-size:8px;">NOMBRE Y APELLIDO DEL COORDINADOR DE GESTIÓN HUMANA / GERENCIA OPERACIONAL</td>
+      <td class="lbl ctr bb0">18.</td>
+      <td colspan="10" class="lbl bb0" style="font-size:8.5px;">NOMBRE Y APELLIDO DEL (LA) COORDINADOR (A) DE BIENESTAR SOCIAL</td>
+      <td class="lbl ctr bb0">19.</td>
+      <td colspan="11" class="lbl bb0" style="font-size:8.5px;">NOMBRE Y APELLIDO DEL (LA) GERENTE DE LA OFICINA DE GESTIÓN HUMANA</td>
+    </tr>
+    <tr style="height:35px;">
+      <td colspan="9" class="vb ctr" style="border-top:none;">
+        <div class="firma-name">${v('sol-coord-gh')}</div>
+        <div class="firma-line">FIRMA Y SELLO</div>
+      </td>
+      <td colspan="11" class="vb ctr" style="border-top:none;">
+        <div class="firma-name">${v('sol-coord-bs')}</div>
+        <div class="firma-line">FIRMA</div>
+      </td>
+      <td colspan="12" class="vb ctr" style="border-top:none;">
+        <div class="firma-name">${v('sol-gerente-gh')}</div>
+        <div class="firma-line">FIRMA Y SELLO</div>
+      </td>
+    </tr>
+
+    <!-- R35: Analistas -->
+    <tr style="height:18px;">
+      <td class="nb" style="border:none;"></td>
+      <td colspan="15" class="nb" style="border:none;font-size:8px;vertical-align:bottom;">
+        <div class="an-line">Analista Responsable del Registro Coordinación GO:</div>
+      </td>
+      <td class="nb" style="border:none;"></td>
+      <td colspan="15" class="nb" style="border:none;font-size:8px;vertical-align:bottom;">
+        <div class="an-line">Analista Responsable del Registro Bienestar Social:</div>
+      </td>
+    </tr>
+
+    <!-- R36: espacio -->
+    <tr><td colspan="32" class="nb" style="height:6px;border:none;"></td></tr>
+
+    <!-- R37: V. EN CASO DE SUSPENSIÓN -->
+    <tr><td colspan="32" class="hdr">V. EN CASO DE SUSPENSIÓN DEL PERIODO VACACIONAL</td></tr>
+
+    <!-- R38: 20. REINTEGRO | 21. INCAPACIDAD | 22. CUIDO FAMILIAR -->
+    <tr style="height:20px;">
+      <td class="lbl ctr">20.</td>
+      <td colspan="9" class="val">REINTEGRO: ____________</td>
+      <td class="lbl ctr">21.</td>
+      <td colspan="10" class="val">INCAPACIDAD TEMPORAL: ____________</td>
+      <td class="lbl ctr">22.</td>
+      <td colspan="9" class="val">PERMISO POR CUIDO FAMILIAR: ____________</td>
+    </tr>
+
+    <!-- R39: ESPECIFIQUE -->
+    <tr style="height:30px;">
+      <td colspan="32" class="val" style="vertical-align:top;padding:5px;">ESPECIFIQUE: _______________________________________________________________________________________________________________</td>
+    </tr>
+  </table>
+  </div>`;
+
+  document.getElementById('modal-preview').classList.add('show');
+}
+
+function imprimirSolicitud() {
+  // Cerrar modal antes de imprimir para que no interfiera
+  document.getElementById('modal-preview').classList.remove('show');
+  const content = document.getElementById('solicitud-print').innerHTML;
+  const printArea = document.getElementById('print-area');
+  printArea.innerHTML = `<div class="solicitud">${content}</div>`;
+  printArea.style.display = 'block';
+  // Pequeña pausa para que el modal se cierre completamente
+  setTimeout(() => {
+    window.print();
+    setTimeout(() => { printArea.style.display = 'none'; }, 500);
+  }, 100);
+}
+
+function reimprimirSolicitud(id) {
+  const sol = solicitudes.find(s => s.id === id);
+  if (!sol) { alert('Solicitud no encontrada.'); return; }
+
+  // Guardar valores actuales del formulario
+  const campos = ['sol-fecha','sol-cedula','sol-nombre','sol-cargo','sol-ingreso','sol-unidad',
+    'sol-unidad-admin','sol-condicion','sol-ubicacion','sol-sueldo','sol-periodo','sol-periodo-pend',
+    'sol-desde','sol-hasta','sol-dias','sol-reintegro','sol-obs','sol-supervisor','sol-gerente',
+    'sol-coord-gh','sol-gerente-gh','sol-coord-bs','sol-comision'];
+  const backup = {};
+  campos.forEach(c => { const el = document.getElementById(c); if (el) { backup[c] = el.value; } });
+
+  // Llenar formulario con datos GUARDADOS (sin recalcular)
+  const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+  setVal('sol-fecha', sol.fecha);
+  setVal('sol-cedula', sol.cedula);
+  setVal('sol-nombre', sol.nombre);
+  setVal('sol-cargo', sol.cargo);
+  setVal('sol-ingreso', sol.ingreso);
+  setVal('sol-unidad', sol.unidad);
+  setVal('sol-unidad-admin', sol.unidadAdmin);
+  setVal('sol-condicion', sol.condicion);
+  setVal('sol-ubicacion', sol.ubicacion);
+  setVal('sol-sueldo', sol.sueldo);
+  setVal('sol-periodo', sol.periodo);
+  setVal('sol-periodo-pend', sol.periodoPend);
+  setVal('sol-desde', sol.desde);
+  setVal('sol-hasta', sol.hasta);
+  setVal('sol-dias', sol.dias); // Usar los días GUARDADOS, no recalcular
+  setVal('sol-reintegro', sol.reintegro);
+  setVal('sol-obs', sol.obs);
+  setVal('sol-supervisor', sol.supervisor);
+  setVal('sol-gerente', sol.gerente);
+  setVal('sol-coord-gh', sol.coordGH);
+  setVal('sol-gerente-gh', sol.gerenteGH);
+  setVal('sol-coord-bs', sol.coordBS);
+  setVal('sol-comision', sol.comision);
+
+  // Generar preview con datos guardados e imprimir
+  previsualizarSolicitud();
+  // Cerrar modal e imprimir directamente
+  document.getElementById('modal-preview').classList.remove('show');
+  const content = document.getElementById('solicitud-print').innerHTML;
+  const printArea = document.getElementById('print-area');
+  printArea.innerHTML = `<div class="solicitud">${content}</div>`;
+  printArea.style.display = 'block';
+
+  // Restaurar formulario
+  campos.forEach(c => { const el = document.getElementById(c); if (el) el.value = backup[c] || ''; });
+
+  setTimeout(() => {
+    window.print();
+    setTimeout(() => { printArea.style.display = 'none'; }, 500);
+  }, 200);
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('show');
+}
+
+// ══════════════ REPOSOS ══════════════
+function calcularDiasReposo() {
+  const desde = document.getElementById('rep-desde').value;
+  const hasta = document.getElementById('rep-hasta').value;
+  if (desde && hasta) {
+    const d1 = parseFechaInput(desde), d2 = parseFechaInput(hasta);
+    if (!d1 || !d2 || d2 < d1) return;
+    const dias = Math.round((d2 - d1) / 86400000) + 1;
+    document.getElementById('rep-dias').value = dias;
+  }
+}
+
+function guardarReposo() {
+  const rep = {
+    id: nuevoId(),
+    tipo: 'REPOSO',
+    fecha: new Date().toISOString().split('T')[0],
+    cedula: document.getElementById('rep-cedula').value,
+    nombre: document.getElementById('rep-nombre').value,
+    unidad: document.getElementById('rep-unidad').value,
+    ubicacion: document.getElementById('rep-ubicacion').value,
+    tpr: document.getElementById('rep-tpr').value,
+    diagnostico: document.getElementById('rep-diagnostico').value,
+    emitidoPor: document.getElementById('rep-emitido').value,
+    desde: document.getElementById('rep-desde').value,
+    hasta: document.getElementById('rep-hasta').value,
+    dias: document.getElementById('rep-dias').value,
+    convalidado: document.getElementById('rep-convalidado').value,
+    obs: document.getElementById('rep-obs').value,
+    estado: 'ACTIVO'
+  };
+  if (!rep.cedula || !rep.nombre) { alert('Ingrese al menos cédula y nombre.'); return; }
+  reposos.push(rep);
+  saveData();
+  alert('Reposo #' + rep.id + ' registrado.');
+  limpiarReposo();
+  renderReposos();
+}
+
+function limpiarReposo() {
+  ['rep-cedula','rep-nombre','rep-unidad','rep-diagnostico','rep-desde','rep-hasta','rep-dias','rep-obs'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+}
+
+function renderReposos() {
+  const tbody = document.getElementById('tbody-rep');
+  if (!tbody) return;
+  const search = (document.getElementById('search-rep').value || '').toLowerCase();
+  const tprFilter = (document.getElementById('filter-tpr') || {}).value || '';
+  const convFilter = (document.getElementById('filter-convalidado') || {}).value || '';
+  const mesFilter = (document.getElementById('filter-mes-rep') || {}).value || '';
+
+  let filtered = reposos.filter(r => {
+    if (search && !(r.nombre||'').toLowerCase().includes(search) && !(r.cedula||'').includes(search)) return false;
+    if (tprFilter && r.tpr !== tprFilter) return false;
+    if (convFilter && r.convalidado !== convFilter) return false;
+    if (mesFilter && r.desde && !r.desde.startsWith(mesFilter)) return false;
+    return true;
+  });
+
+  const convBadge = (c) => {
+    if (c === 'SI') return '<span class="badge badge-ok">SI</span>';
+    if (c === 'NO') return '<span class="badge badge-danger">NO</span>';
+    if (c === 'EN PROCESO') return '<span class="badge badge-warn">EN PROCESO</span>';
+    if (c === 'EXTEMPORÁNEO') return '<span class="badge badge-info">EXTEMP.</span>';
+    return c || '';
+  };
+
+  const tprBadge = (t) => {
+    if (t === 'E') return '<span class="badge badge-info" title="Enfermedad">E</span>';
+    if (t === 'AT') return '<span class="badge badge-danger" title="Accidente de Trabajo">AT</span>';
+    return t || '';
+  };
+
+  const fmtDate = (d) => {
+    if (!d) return '';
+    const p = d.split('-');
+    return p[2]+'/'+p[1]+'/'+p[0];
+  };
+
+  tbody.innerHTML = filtered.map((r, i) => `<tr>
+    <td>${i+1}</td>
+    <td>${r.cedula}</td>
+    <td><strong>${r.nombre}</strong></td>
+    <td style="font-size:11px;">${r.unidad || ''}</td>
+    <td>${fmtDate(r.desde)}</td>
+    <td>${fmtDate(r.hasta)}</td>
+    <td class="text-center"><strong>${r.dias || ''}</strong></td>
+    <td class="text-center">${tprBadge(r.tpr)}</td>
+    <td style="font-size:11px;">${r.diagnostico || ''}</td>
+    <td style="font-size:11px;">${r.emitidoPor || ''}</td>
+    <td>${r.ubicacion || ''}</td>
+    <td class="text-center">${convBadge(r.convalidado)}</td>
+    <td>
+      ${isAdmin ? `<button class="btn btn-sm btn-outline" onclick="editConvalidado(${r.id})" title="Cambiar convalidación">Conv.</button>
+      <button class="btn btn-danger btn-sm" onclick="eliminarReposo(${r.id})">×</button>` : ''}
+    </td>
+  </tr>`).join('') || '<tr><td colspan="13" style="text-align:center;color:#999;">Sin reposos registrados para este período</td></tr>';
+
+  // Update count
+  const mesLabel = document.getElementById('mes-reposos');
+  if (mesLabel) {
+    const mesNames = {'01':'Enero','02':'Febrero','03':'Marzo','04':'Abril','05':'Mayo','06':'Junio','07':'Julio','08':'Agosto','09':'Septiembre','10':'Octubre','11':'Noviembre','12':'Diciembre'};
+    if (mesFilter) {
+      const [y,m] = mesFilter.split('-');
+      mesLabel.textContent = (mesNames[m]||'') + ' ' + y + ' (' + filtered.length + ' registros)';
+    } else {
+      mesLabel.textContent = 'Todos (' + filtered.length + ' registros)';
+    }
+  }
+}
+
+function filterReposos() { renderReposos(); }
+
+function eliminarReposo(id) {
+  if (!confirm('¿Eliminar este reposo?')) return;
+  reposos = reposos.filter(r => r.id !== id);
+  saveData();
+  renderReposos();
+}
+
+function editConvalidado(id) {
+  const item = reposos.find(r => r.id === id);
+  if (!item) return;
+  const estados = ['EN PROCESO', 'SI', 'NO', 'EXTEMPORÁNEO'];
+  const idx = estados.indexOf(item.convalidado);
+  item.convalidado = estados[(idx + 1) % estados.length];
+  saveData();
+  renderReposos();
+}
+
+// Generar reporte imprimible estilo formato oficial
+function generarReporteReposos() {
+  const mesFilter = (document.getElementById('filter-mes-rep') || {}).value || '';
+  const mesNames = {'01':'ENERO','02':'FEBRERO','03':'MARZO','04':'ABRIL','05':'MAYO','06':'JUNIO','07':'JULIO','08':'AGOSTO','09':'SEPTIEMBRE','10':'OCTUBRE','11':'NOVIEMBRE','12':'DICIEMBRE'};
+  let mesTitle = 'TODOS LOS MESES';
+  if (mesFilter) {
+    const [y,m] = mesFilter.split('-');
+    mesTitle = (mesNames[m]||'') + ' ' + y;
+  }
+
+  let filtered = reposos.filter(r => {
+    if (mesFilter && r.desde && !r.desde.startsWith(mesFilter)) return false;
+    return true;
+  });
+
+  const fmtDate = (d) => { if (!d) return ''; const p = d.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; };
+
+  let rows = filtered.map((r, i) => `<tr>
+    <td style="text-align:center;">${i+1}</td>
+    <td style="text-align:center;">${r.cedula}</td>
+    <td>${r.nombre}</td>
+    <td style="font-size:9px;">${r.unidad||''}</td>
+    <td style="text-align:center;">${fmtDate(r.desde)}</td>
+    <td style="text-align:center;">${fmtDate(r.hasta)}</td>
+    <td style="text-align:center;font-weight:bold;">${r.dias||''}</td>
+    <td style="text-align:center;font-weight:bold;">${r.tpr||''}</td>
+    <td style="font-size:9px;">${r.diagnostico||''}</td>
+    <td style="font-size:9px;">${r.emitidoPor||''}</td>
+    <td style="text-align:center;">${r.ubicacion||''}</td>
+    <td style="text-align:center;">${r.convalidado==='SI'?'X':''}</td>
+    <td style="text-align:center;">${r.convalidado==='NO'?'X':''}</td>
+    <td style="text-align:center;">${r.convalidado==='EN PROCESO'?'X':''}</td>
+    <td style="text-align:center;">${r.convalidado==='EXTEMPORÁNEO'?'X':''}</td>
+  </tr>`).join('');
+
+  const reportHtml = `<div style="font-family:Arial,sans-serif;font-size:10px;padding:15px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #548235;padding-bottom:10px;margin-bottom:10px;">
+      <div style="font-size:9px;text-align:center;line-height:1.3;">
+        <strong>REPÚBLICA BOLIVARIANA DE VENEZUELA</strong><br>
+        MINISTERIO DEL PODER POPULAR DE DESARROLLO<br>MINERO ECOLÓGICO E INDUSTRIAS BÁSICAS<br>
+        <strong>CORPORACIÓN VENEZOLANA DE MINERÍA, S.A.</strong>
+      </div>
+      <div style="text-align:center;">
+        <strong style="font-size:12px;color:#548235;">RELACIÓN DEL PERSONAL CON REPOSOS MÉDICOS</strong><br>
+        <strong style="font-size:11px;">${mesTitle}</strong><br>
+        <span style="font-size:9px;">BIENESTAR SOCIAL</span>
+      </div>
+      <div style="text-align:center;font-size:9px;color:#548235;">
+        <strong>CVM</strong><br>PIM III<br>CHOCÓ-ISIDORA
+      </div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:9px;">
+      <thead>
+        <tr style="background:#548235;color:white;">
+          <th style="border:1px solid #3d6127;padding:4px 2px;text-align:center;">N°</th>
+          <th style="border:1px solid #3d6127;padding:4px 2px;text-align:center;">C.I.</th>
+          <th style="border:1px solid #3d6127;padding:4px 3px;">NOMBRES Y APELLIDOS</th>
+          <th style="border:1px solid #3d6127;padding:4px 2px;">UNIDAD DE ADSCRIPCIÓN</th>
+          <th style="border:1px solid #3d6127;padding:4px 2px;text-align:center;" colspan="2">PERÍODO DE REPOSO</th>
+          <th style="border:1px solid #3d6127;padding:4px 2px;text-align:center;">TIEMPO</th>
+          <th style="border:1px solid #3d6127;padding:4px 2px;text-align:center;">TPR</th>
+          <th style="border:1px solid #3d6127;padding:4px 2px;">DIAGNÓSTICO</th>
+          <th style="border:1px solid #3d6127;padding:4px 2px;">EMITIDO POR</th>
+          <th style="border:1px solid #3d6127;padding:4px 2px;text-align:center;">OPERA</th>
+          <th style="border:1px solid #3d6127;padding:4px 1px;text-align:center;" colspan="4">CONVALIDADO</th>
+        </tr>
+        <tr style="background:#e8f0d8;font-size:8px;">
+          <th style="border:1px solid #aaa;"></th><th style="border:1px solid #aaa;"></th><th style="border:1px solid #aaa;"></th><th style="border:1px solid #aaa;"></th>
+          <th style="border:1px solid #aaa;text-align:center;">DESDE</th>
+          <th style="border:1px solid #aaa;text-align:center;">HASTA</th>
+          <th style="border:1px solid #aaa;"></th><th style="border:1px solid #aaa;"></th><th style="border:1px solid #aaa;"></th><th style="border:1px solid #aaa;"></th><th style="border:1px solid #aaa;"></th>
+          <th style="border:1px solid #aaa;text-align:center;padding:2px;">SI</th>
+          <th style="border:1px solid #aaa;text-align:center;padding:2px;">NO</th>
+          <th style="border:1px solid #aaa;text-align:center;padding:2px;">EN PROC.</th>
+          <th style="border:1px solid #aaa;text-align:center;padding:2px;">EXTEMP.</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div style="margin-top:40px;display:flex;justify-content:space-between;">
+      <div style="text-align:center;width:40%;border-top:1px solid #333;padding-top:5px;font-size:9px;">
+        <strong>COORDINADOR(A) DE SERVICIOS MÉDICOS</strong><br>PIM III CVM-CHOCÓ/ISIDORA
+      </div>
+      <div style="text-align:center;width:40%;border-top:1px solid #333;padding-top:5px;font-size:9px;">
+        <strong>COORDINADOR(A) DE GESTIÓN HUMANA</strong><br>PIM III CVM-CHOCÓ/ISIDORA
+      </div>
+    </div>
+  </div>`;
+
+  const printArea = document.getElementById('print-area');
+  printArea.innerHTML = reportHtml;
+  printArea.style.display = 'block';
+  // Style all td in print
+  printArea.querySelectorAll('td').forEach(td => {
+    td.style.border = '1px solid #ccc';
+    td.style.padding = '3px 4px';
+  });
+  window.print();
+  setTimeout(() => { printArea.style.display = 'none'; }, 500);
+}
+
+// ══════════════ HISTORIAL ══════════════
+function renderHistorial() {
+  const tbody = document.getElementById('tbody-hist');
+  const search = (document.getElementById('search-hist').value || '').toLowerCase();
+  const tipo = (document.getElementById('filter-tipo-hist') || {}).value || '';
+  const estado = document.getElementById('filter-estado-hist').value;
+
+  // Auto-actualizar estados de solicitudes según fechas
+  solicitudes.forEach(sol => {
+    const autoEstado = calcularEstadoAutomatico(sol.desde, sol.hasta);
+    if (autoEstado !== sol.estado) {
+      sol.estado = autoEstado;
+      sincronizarEstadoConVacaciones(sol.id, autoEstado);
+    }
+  });
+
+  let all = [
+    ...solicitudes.map(s => ({...s, _tipo: 'VACACIONES'})),
+    ...reposos.map(r => ({...r, _tipo: 'REPOSO', periodo: (r.tpr||'E') + ' — ' + (r.diagnostico||'')}))
+  ].sort((a,b) => (b.fecha||'').localeCompare(a.fecha||''));
+
+  let filtered = all.filter(r => {
+    if (search && !(r.nombre||'').toLowerCase().includes(search) && !(r.cedula||'').includes(search)) return false;
+    if (tipo && r._tipo !== tipo) return false;
+    if (estado && r.estado !== estado) return false;
+    return true;
+  });
+
+  tbody.innerHTML = filtered.map((r, i) => {
+    const estadoBadge = r.estado === 'APROBADA' ? 'badge-ok' : r.estado === 'PENDIENTE' ? 'badge-warn' : r.estado === 'EN DISFRUTE' ? 'badge-info' : r.estado === 'ACTIVO' ? 'badge-warn' : r.estado === 'FINALIZADO' ? 'badge-ok' : 'badge-ok';
+    const tipoBadge = r._tipo === 'VACACIONES' ? 'badge-info' : 'badge-warn';
+    return `<tr>
+      <td>${i+1}</td>
+      <td>${r.fecha || ''}</td>
+      <td><span class="badge ${tipoBadge}">${r._tipo}</span></td>
+      <td>${r.cedula}</td>
+      <td><strong>${r.nombre}</strong></td>
+      <td>${r.periodo || r.tipoReposo || ''}</td>
+      <td>${r.desde || ''}</td>
+      <td>${r.hasta || ''}</td>
+      <td>${r.dias || ''}</td>
+      <td><span class="badge ${estadoBadge}">${r.estado}</span></td>
+      <td>
+        ${r._tipo === 'VACACIONES' ? `<button class="btn btn-sm" style="background:#1F4E79;color:#fff;" onclick="reimprimirSolicitud(${r.id})" title="Imprimir formato de vacaciones">&#128424;</button> ` : ''}${isAdmin ? (r._tipo === 'VACACIONES'
+          ? `<button class="btn btn-sm btn-outline" onclick="cambiarEstado(${r.id},'sol')">Estado</button> <button class="btn btn-sm" style="background:#c0392b;color:#fff;" onclick="eliminarHistorial(${r.id},'VACACIONES')">Eliminar</button>`
+          : `<button class="btn btn-sm btn-outline" onclick="cambiarEstadoReposo(${r.id})">Estado</button> <button class="btn btn-sm" style="background:#c0392b;color:#fff;" onclick="eliminarHistorial(${r.id},'REPOSO')">Eliminar</button>`
+        ) : ''}
+      </td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="11" style="text-align:center;color:#999;">Sin registros en el historial</td></tr>';
+}
+
+function filterHistorial() { renderHistorial(); }
+
+function cambiarEstado(id, type) {
+  const estados = ['PENDIENTE', 'APROBADA', 'EN DISFRUTE', 'COMPLETADA'];
+  const item = solicitudes.find(s => s.id === id);
+  if (!item) return;
+  const idx = estados.indexOf(item.estado);
+  item.estado = estados[(idx + 1) % estados.length];
+  saveData();
+  // Sincronizar el nuevo estado con Vacaciones Vencidas
+  sincronizarEstadoConVacaciones(id, item.estado);
+  renderHistorial();
+  renderDashboard();
+}
+
+function cambiarEstadoReposo(id) {
+  const estados = ['ACTIVO', 'FINALIZADO'];
+  const item = reposos.find(r => r.id === id);
+  if (!item) return;
+  const idx = estados.indexOf(item.estado);
+  item.estado = estados[(idx + 1) % estados.length];
+  saveData();
+  renderHistorial();
+  renderReposos();
+}
+
+// ══════════════ IMPORTAR REPOSOS MASIVO ══════════════
+function importReposos(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      if (rows.length < 2) { alert('El archivo está vacío o no tiene datos.'); return; }
+
+      // Detectar columnas por encabezado
+      const hdr = rows[0].map(h => String(h).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''));
+      const colMap = { cedula: -1, nombre: -1, unidad: -1, ubicacion: -1, tpr: -1, diagnostico: -1, emitido: -1, desde: -1, hasta: -1, dias: -1, convalidado: -1, obs: -1, estado: -1, fecha: -1 };
+
+      hdr.forEach((h, idx) => {
+        if (h.includes('cedula') || h === 'c.i.' || h === 'ci') colMap.cedula = idx;
+        else if (h.includes('nombre') || h.includes('apellido') || h.includes('trabajador')) colMap.nombre = idx;
+        else if (h.includes('unidad') || h.includes('gerencia') || h.includes('adscripcion')) colMap.unidad = idx;
+        else if (h.includes('ubicacion') || h.includes('sede')) colMap.ubicacion = idx;
+        else if (h.includes('tipo') && (h.includes('reposo') || h.includes('tpr'))) colMap.tpr = idx;
+        else if (h === 'tipo' || h === 'tpr') colMap.tpr = idx;
+        else if (h.includes('diagnostico') || h.includes('motivo') || h.includes('patologia')) colMap.diagnostico = idx;
+        else if (h.includes('emitido') || h.includes('medico') || h.includes('doctor')) colMap.emitido = idx;
+        else if (h.includes('desde') || h.includes('inicio') || h.includes('fecha inicio')) colMap.desde = idx;
+        else if (h.includes('hasta') || h.includes('fin') || h.includes('fecha fin')) colMap.hasta = idx;
+        else if (h.includes('dias') || h.includes('duracion')) colMap.dias = idx;
+        else if (h.includes('convalidado') || h.includes('conval')) colMap.convalidado = idx;
+        else if (h.includes('observ') || h.includes('obs')) colMap.obs = idx;
+        else if (h.includes('estado')) colMap.estado = idx;
+        else if (h.includes('fecha') && !h.includes('inicio') && !h.includes('fin') && !h.includes('ingreso')) colMap.fecha = idx;
+      });
+
+      if (colMap.cedula < 0) {
+        alert('No se encontró la columna CÉDULA en el encabezado del Excel.\n\nAsegúrese de que la primera fila tenga encabezados como:\nCédula, Nombre, Tipo Reposo, Diagnóstico, Desde, Hasta, Días, etc.');
+        return;
+      }
+
+      function parseDate(val) {
+        if (!val) return '';
+        if (val instanceof Date) return val.toISOString().split('T')[0];
+        if (typeof val === 'number') {
+          const d = new Date((val - 25569) * 86400000);
+          return d.toISOString().split('T')[0];
+        }
+        const s = String(val).trim();
+        // dd/mm/yyyy o dd-mm-yyyy
+        const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+        if (m) return m[3] + '-' + m[2].padStart(2,'0') + '-' + m[1].padStart(2,'0');
+        // yyyy-mm-dd
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+        return s;
+      }
+
+      function parseTpr(val) {
+        const v = String(val).toUpperCase().trim();
+        if (v.includes('ENFERMEDAD') || v === 'E' || v.includes('ENF')) return 'E';
+        if (v.includes('PRENAT') || v.includes('PRE-NAT') || v === 'PRE') return 'PRE';
+        if (v.includes('POSTNAT') || v.includes('POST-NAT') || v === 'POST') return 'POST';
+        if (v.includes('ACCIDENTE') || v === 'A' || v.includes('ACC')) return 'A';
+        return v || 'E';
+      }
+
+      let count = 0;
+      const dataRows = rows.slice(1).filter(r => r[colMap.cedula]);
+
+      for (const r of dataRows) {
+        const rep = {
+          id: nuevoId(),
+          tipo: 'REPOSO',
+          fecha: colMap.fecha >= 0 ? parseDate(r[colMap.fecha]) : new Date().toISOString().split('T')[0],
+          cedula: String(r[colMap.cedula] || '').replace(/\D/g, ''),
+          nombre: String(r[colMap.nombre >= 0 ? colMap.nombre : ''] || '').toUpperCase(),
+          unidad: colMap.unidad >= 0 ? String(r[colMap.unidad] || '') : '',
+          ubicacion: colMap.ubicacion >= 0 ? String(r[colMap.ubicacion] || '') : 'PIM III - Planta Choco',
+          tpr: colMap.tpr >= 0 ? parseTpr(r[colMap.tpr]) : 'E',
+          diagnostico: colMap.diagnostico >= 0 ? String(r[colMap.diagnostico] || '') : '',
+          emitidoPor: colMap.emitido >= 0 ? String(r[colMap.emitido] || '') : '',
+          desde: colMap.desde >= 0 ? parseDate(r[colMap.desde]) : '',
+          hasta: colMap.hasta >= 0 ? parseDate(r[colMap.hasta]) : '',
+          dias: colMap.dias >= 0 ? String(r[colMap.dias] || '') : '',
+          convalidado: colMap.convalidado >= 0 ? String(r[colMap.convalidado] || 'NO') : 'NO',
+          obs: colMap.obs >= 0 ? String(r[colMap.obs] || '') : '',
+          estado: colMap.estado >= 0 ? String(r[colMap.estado] || 'ACTIVO').toUpperCase() : 'FINALIZADO'
+        };
+        if (!rep.cedula || !rep.nombre) continue;
+        // Calcular días si no viene en el Excel
+        if (!rep.dias && rep.desde && rep.hasta) {
+          const d1 = new Date(rep.desde), d2 = new Date(rep.hasta);
+          if (!isNaN(d1) && !isNaN(d2)) rep.dias = String(Math.round((d2 - d1) / 86400000) + 1);
+        }
+        reposos.push(rep);
+        count++;
+      }
+
+      saveData();
+      renderReposos();
+      renderHistorial();
+      renderDashboard();
+      alert(count + ' reposos importados correctamente.');
+    } catch(err) {
+      alert('Error al leer el archivo: ' + err.message);
+      console.error(err);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+  input.value = '';
+}
+
+function eliminarHistorial(id, tipo) {
+  const nombre = tipo === 'VACACIONES'
+    ? (solicitudes.find(s => s.id === id) || {}).nombre || ''
+    : (reposos.find(r => r.id === id) || {}).nombre || '';
+  if (!confirm(`¿Está seguro de eliminar este registro de ${tipo} de ${nombre}?\n\nEsta acción no se puede deshacer.`)) return;
+  if (tipo === 'VACACIONES') {
+    // Limpiar referencia en Vacaciones Vencidas
+    const sol = solicitudes.find(s => s.id === id);
+    if (sol) {
+      const cedula = (sol.cedula || '').replace(/\D/g, '');
+      const regVac = vacacionesData.find(r => r._solId === id || (r.c === cedula && r.o && r.o.includes('SOL #' + id)));
+      if (regVac) {
+        regVac._solId = 0;
+        regVac._estado = '';
+        regVac.o = regVac.o.replace(/SOL #\d+ - \w+\s*\|?\s*/g, '').trim();
+        if (regVac.o.startsWith('|')) regVac.o = regVac.o.substring(1).trim();
+        guardarNuevosRegistrosVacaciones();
+      }
+    }
+    solicitudes = solicitudes.filter(s => s.id !== id);
+  } else {
+    reposos = reposos.filter(r => r.id !== id);
+  }
+  saveData();
+  renderHistorial();
+  renderVacaciones();
+  renderDashboard();
+}
+
+// ══════════════ DASHBOARD ══════════════
+function renderDashboard() {
+  // Stats
+  const totalTrab = new Set(vacacionesData.map(r => r.c)).size;
+  const criticos = vacacionesData.filter(r => (parseInt(r.tv)||0) >= 8).length;
+  const choco = vacacionesData.filter(r => r.u.includes('Choco')).length;
+  const isidora = vacacionesData.filter(r => r.u.includes('Isidora')).length;
+  const solPend = solicitudes.filter(s => s.estado === 'PENDIENTE').length;
+  const repActivos = reposos.filter(r => r.convalidado === 'EN PROCESO' || r.estado === 'ACTIVO').length;
+  const repConvalidados = reposos.filter(r => r.convalidado === 'SI').length;
+
+  // Calcular trabajadores por base legal
+  const porLOT = vacacionesData.filter(r => (parseInt(r.up)||0) <= 2018).length;
+  const porCVM = vacacionesData.filter(r => (parseInt(r.up)||0) >= 2019).length;
+
+  document.getElementById('stats-cards').innerHTML = `
+    <div class="stat-card"><div class="label">Trabajadores con Vac. Vencidas</div><div class="value">${totalTrab}</div><div class="sub">${vacacionesData.length} registros — LOT: ${porLOT} | P/C CVM: ${porCVM}</div></div>
+    <div class="stat-card danger"><div class="label">Críticos (+8 años)</div><div class="value">${criticos}</div><div class="sub">Requieren atención inmediata</div></div>
+    <div class="stat-card warn"><div class="label">Solicitudes Pendientes</div><div class="value">${solPend}</div><div class="sub">De ${solicitudes.length} solicitudes totales</div></div>
+    <div class="stat-card success"><div class="label">Reposos Registrados</div><div class="value">${reposos.length}</div><div class="sub">${repConvalidados} convalidados | ${repActivos} en proceso</div></div>
+  `;
+
+  // Top vencidas
+  const sorted = [...vacacionesData].sort((a,b) => (parseInt(b.tv)||0) - (parseInt(a.tv)||0));
+  const top = sorted.slice(0, 15);
+  document.getElementById('top-vencidas').innerHTML = `
+    <thead><tr><th>N°</th><th>Cédula</th><th>Nombre</th><th>Cargo</th><th>Último Período</th><th>Años Vencidos</th><th>Sede</th></tr></thead>
+    <tbody>${top.map((r,i) => `<tr>
+      <td>${i+1}</td><td>${r.c}</td><td><strong>${r.n}</strong></td><td>${r.g}</td>
+      <td class="text-center">${r.up}</td>
+      <td class="text-center"><strong style="color:${(parseInt(r.tv)||0)>=8?'#C00':'#ED7D31'}">${r.tv}</strong></td>
+      <td>${(r.u||'').replace('PIM III - ','')}</td>
+    </tr>`).join('')}</tbody>
+  `;
+
+  // Recent solicitudes
+  const recent = [...solicitudes].reverse().slice(0, 5);
+  if (recent.length) {
+    document.getElementById('recent-solicitudes').innerHTML = `<table>
+      <thead><tr><th>Fecha</th><th>Nombre</th><th>Período</th><th>Días</th><th>Estado</th></tr></thead>
+      <tbody>${recent.map(s => `<tr>
+        <td>${s.fecha}</td><td>${s.nombre}</td><td>${s.periodo}</td><td>${s.dias}</td>
+        <td><span class="badge ${s.estado==='PENDIENTE'?'badge-warn':'badge-ok'}">${s.estado}</span></td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+  }
+
+  // Charts
+  renderCharts(choco, isidora);
+}
+
+function renderCharts(choco, isidora) {
+  // Simple bar charts using canvas
+  drawBarChart('chart-sede',
+    ['Planta Chocó', 'Mina Isidora'],
+    [choco, isidora],
+    ['#4472C4', '#ED7D31']
+  );
+
+  const ranges = {'1-2': 0, '3-4': 0, '5-7': 0, '8-10': 0, '11+': 0};
+  vacacionesData.forEach(r => {
+    const tv = parseInt(r.tv) || 0;
+    if (tv <= 2) ranges['1-2']++;
+    else if (tv <= 4) ranges['3-4']++;
+    else if (tv <= 7) ranges['5-7']++;
+    else if (tv <= 10) ranges['8-10']++;
+    else ranges['11+']++;
+  });
+  drawBarChart('chart-vencidas',
+    Object.keys(ranges),
+    Object.values(ranges),
+    ['#548235', '#FFC000', '#ED7D31', '#C00000', '#7030A0']
+  );
+}
+
+function drawBarChart(canvasId, labels, values, colors) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width = canvas.parentElement.clientWidth;
+  const h = canvas.height = 200;
+  ctx.clearRect(0, 0, w, h);
+
+  const max = Math.max(...values, 1);
+  const barW = Math.min(80, (w - 80) / labels.length - 20);
+  const startX = 60;
+  const chartH = h - 50;
+
+  // Y axis
+  ctx.strokeStyle = '#ddd';
+  ctx.fillStyle = '#999';
+  ctx.font = '10px Arial';
+  for (let i = 0; i <= 4; i++) {
+    const y = 10 + (chartH / 4) * i;
+    const val = Math.round(max - (max / 4) * i);
+    ctx.beginPath(); ctx.moveTo(55, y); ctx.lineTo(w - 10, y); ctx.stroke();
+    ctx.fillText(val, 5, y + 4);
+  }
+
+  // Bars
+  labels.forEach((label, i) => {
+    const x = startX + i * ((w - startX - 20) / labels.length) + 10;
+    const barH = (values[i] / max) * chartH;
+    const y = 10 + chartH - barH;
+
+    ctx.fillStyle = colors[i % colors.length];
+    ctx.fillRect(x, y, barW, barH);
+
+    // Value on top
+    ctx.fillStyle = '#333';
+    ctx.font = 'bold 12px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(values[i], x + barW/2, y - 5);
+
+    // Label
+    ctx.fillStyle = '#666';
+    ctx.font = '10px Arial';
+    ctx.fillText(label, x + barW/2, h - 5);
+  });
+  ctx.textAlign = 'start';
+}
+
+// ══════════════ EXPORT ══════════════
+function exportVacaciones() {
+  // Reconstruir los períodos otorgados desde el Historial de solicitudes (solo lectura)
+  const hist = {};
+  solicitudes.forEach(sol => {
+    const ced = (sol.cedula || '').replace(/\D/g, '');
+    if (!ced) return;
+    if (!hist[ced]) hist[ced] = { per: [], dias: 0, est: '' };
+    extraerPeriodos(sol.periodo).forEach(p => {
+      if (hist[ced].per.indexOf(p) < 0) hist[ced].per.push(p);
+    });
+    hist[ced].dias += parseInt(sol.dias) || 0;
+    if (sol.estado) hist[ced].est = sol.estado;
+  });
+
+  const headers = ['N°','Cédula','Nombre y Apellido','Tipo Personal','Cargo','Fecha Ingreso','Último Período','Período Pendiente','Total Vencidas','Períodos Otorgados','Días Otorgados','Estado','Ubicación','Observación'];
+  const rows = vacacionesData.map((r, i) => {
+    const h = hist[r.c];
+    // Unir lo guardado en la ficha con lo que aparece en el Historial
+    const todos = extraerPeriodos(r.po || '').concat(h ? h.per : []);
+    const unicos = todos.filter((v, k) => todos.indexOf(v) === k).sort();
+    const periodosTxt = unicos.join(' / ');
+    const diasTxt = r.dOt || (h && h.dias ? String(h.dias) : '');
+    const estadoTxt = r._estado || (h ? h.est : '') || '';
+    return [
+      i+1, r.c, r.n, r.tp || '', r.g, r.i || '', r.up || '', r.pp || '', r.tv || '',
+      periodosTxt, diasTxt, estadoTxt, r.u, r.o || ''
+    ];
+  });
+  downloadExcel([headers, ...rows], 'Vacaciones Vencidas', 'Vacaciones_Vencidas_PIM3.xls',
+    [5, 14, 40, 18, 30, 14, 14, 14, 12, 34, 12, 14, 22, 34]);
+}
+
+function exportReposos() {
+  const mesFilter = (document.getElementById('filter-mes-rep') || {}).value || '';
+  let filtered = reposos.filter(r => {
+    if (mesFilter && r.desde && !r.desde.startsWith(mesFilter)) return false;
+    return true;
+  });
+  const fmtD = d => { if (!d) return ''; const p = d.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; };
+  const headers = ['N°','C.I.','Nombres y Apellidos','Unidad de Adscripción','Desde','Hasta','Tiempo','TPR','Diagnóstico','Emitido Por','Opera','Convalidado','Observaciones'];
+  const rows = filtered.map((r, i) => [
+    i+1, r.cedula, r.nombre, r.unidad||'', fmtD(r.desde), fmtD(r.hasta), r.dias, r.tpr||'E', r.diagnostico||'', r.emitidoPor||'', r.ubicacion, r.convalidado||'', r.obs||''
+  ]);
+  const mesNames = {'01':'Enero','02':'Febrero','03':'Marzo','04':'Abril','05':'Mayo','06':'Junio','07':'Julio','08':'Agosto','09':'Septiembre','10':'Octubre','11':'Noviembre','12':'Diciembre'};
+  let suffix = '';
+  if (mesFilter) { const [y,m] = mesFilter.split('-'); suffix = '_' + (mesNames[m]||m) + '_' + y; }
+  downloadExcel([headers, ...rows], 'Reposos Médicos', 'Reposos_PIM3' + suffix + '.xls',
+    [5, 12, 35, 28, 12, 12, 8, 6, 30, 20, 14, 14, 25]);
+}
+
+function exportHistorial() {
+  const fmtD = d => { if (!d) return ''; const p = d.split('-'); return p.length===3 ? p[2]+'/'+p[1]+'/'+p[0] : d; };
+  const all = [
+    ...solicitudes.map(s => ({...s, _tipo: 'VACACIONES'})),
+    ...reposos.map(r => ({...r, _tipo: 'REPOSO', periodo: (r.tpr||'E') + ' — ' + (r.diagnostico||'')}))
+  ].sort((a,b) => (b.fecha||'').localeCompare(a.fecha||''));
+  const headers = ['N°','Fecha','Tipo','Cédula','Nombre','Período/Motivo','Desde','Hasta','Días','Estado'];
+  const rows = all.map((r, i) => [
+    i+1, fmtD(r.fecha), r._tipo, r.cedula, r.nombre, r.periodo||r.tipoReposo||'', fmtD(r.desde), fmtD(r.hasta), r.dias||'', r.estado
+  ]);
+  downloadExcel([headers, ...rows], 'Historial', 'Historial_Completo_PIM3.xls',
+    [5, 12, 14, 14, 35, 25, 12, 12, 12, 14]);
+}
+
+// ══════════════ EXPORTAR EXCEL (.xls) ══════════════
+function downloadExcel(data, sheetName, filename, colWidths) {
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(data);
+
+  // Anchos de columna
+  if (colWidths) {
+    ws['!cols'] = colWidths.map(w => ({ wch: w }));
+  }
+
+  // Estilo de encabezado (SheetJS community no soporta estilos, pero la estructura queda limpia)
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  XLSX.writeFile(wb, filename);
+}
+
+// ══════════════ IMPORT ══════════════
+function importFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      let data;
+      if (file.name.endsWith('.csv')) {
+        const lines = e.target.result.split('\n').filter(l => l.trim());
+        data = lines.slice(1).map(line => {
+          const cols = line.split(',').map(c => c.replace(/"/g, '').trim());
+          return { c: cols[1]||'', n: cols[2]||'', g: cols[3]||'', i: '', u: cols[6]||'', up: cols[4]||'', tv: cols[5]||'', pp: '', o: cols[7]||'' };
+        });
+      } else {
+        // Leer .xls / .xlsx con SheetJS
+        const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+        if (rows.length < 2) { alert('El archivo está vacío o no tiene datos.'); return; }
+        // Detectar columnas por encabezado (flexible)
+        const hdr = rows[0].map(h => String(h).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''));
+        const colMap = { c: -1, n: -1, g: -1, i: -1, u: -1, up: -1, tv: -1, pp: -1, o: -1, po: -1, dOt: -1, est: -1 };
+        hdr.forEach((h, idx) => {
+          if (h.includes('cedula') || h === 'c.i.' || h === 'ci') colMap.c = idx;
+          else if (h.includes('nombre') || h.includes('apellido')) colMap.n = idx;
+          else if (h.includes('cargo')) colMap.g = idx;
+          else if (h.includes('ingreso') || h.includes('fecha de ingreso')) colMap.i = idx;
+          else if (h.includes('ubicacion') || h.includes('sede') || h.includes('base')) colMap.u = idx;
+          else if (h.includes('ultimo periodo') || h.includes('ult') || h === 'up') colMap.up = idx;
+          else if (h.includes('total') || h.includes('vencida') || h.includes('años venc') || h === 'tv') colMap.tv = idx;
+          else if (h.includes('periodo pendiente') || h === 'pp') colMap.pp = idx;
+          else if (h.includes('observ') || h === 'o') colMap.o = idx;
+          else if (h.includes('periodos otorgados')) colMap.po = idx;
+          else if (h.includes('dias otorgados')) colMap.dOt = idx;
+          else if (h === 'estado') colMap.est = idx;
+        });
+        // Si no detectó cédula, usar posición fija (N°, Cédula, Nombre, Cargo, UP, TV, PP, Ubicación, Obs)
+        if (colMap.c < 0) { colMap.c=1; colMap.n=2; colMap.g=3; colMap.i=4; colMap.up=5; colMap.pp=6; colMap.tv=7; colMap.u=8; colMap.o=9; }
+        data = rows.slice(1).filter(r => r[colMap.c]).map(r => ({
+          c: String(r[colMap.c] || '').replace(/\D/g, ''),
+          n: String(r[colMap.n >= 0 ? colMap.n : 2] || ''),
+          g: String(r[colMap.g >= 0 ? colMap.g : 3] || ''),
+          i: String(r[colMap.i >= 0 ? colMap.i : 4] || ''),
+          u: String(r[colMap.u >= 0 ? colMap.u : 8] || 'PIM III - Planta Choco'),
+          up: String(r[colMap.up >= 0 ? colMap.up : 5] || ''),
+          tv: String(r[colMap.tv >= 0 ? colMap.tv : 7] || ''),
+          pp: String(r[colMap.pp >= 0 ? colMap.pp : 6] || ''),
+          o: String(r[colMap.o >= 0 ? colMap.o : 9] || ''),
+          po: String(r[colMap.po] || ''),
+          dOt: String(r[colMap.dOt] || ''),
+          _estado: String(r[colMap.est] || '')
+        }));
+      }
+      vacacionesData = data;
+      vacacionesData.forEach(r => r._original = true);
+      saveVacacionesData();
+      renderVacaciones();
+      renderDashboard();
+      const ceds = vacacionesData.map(r => r.c);
+      const dup = ceds.length - new Set(ceds).size;
+      alert(data.length + ' registros importados correctamente.' +
+            (dup > 0 ? '\n\nAviso: hay ' + dup + ' filas con cédula repetida. Puede unificarlas con el botón "Unificar duplicados".' : ''));
+    } catch(err) {
+      alert('Error al leer el archivo: ' + err.message);
+      console.error(err);
+    }
+  };
+  if (file.name.endsWith('.csv')) reader.readAsText(file);
+  else reader.readAsArrayBuffer(file);
+  input.value = '';
+}
+
+// ══════════════ CALENDARIO ══════════════
+let calYear = new Date().getFullYear();
+let calMonth = new Date().getMonth(); // 0-based
+
+const MESES_NOMBRES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const DIAS_SEMANA = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+
+// Nombres de feriados para tooltip (LOTTT Art. 184 + Ley de Fiestas Nacionales)
+function nombreFeriado(date) {
+  const m = date.getMonth(), d = date.getDate();
+  const fijos = {
+    '0-1':'Año Nuevo',
+    '3-19':'Declaración de Independencia','4-1':'Día del Trabajador',
+    '5-24':'Batalla de Carabobo','6-5':'Día de la Independencia',
+    '6-24':'Natalicio de Bolívar','9-12':'Día de la Resistencia Indígena',
+    '11-24':'Nochebuena','11-25':'Navidad','11-31':'Fin de Año'
+  };
+  if (fijos[m+'-'+d]) return fijos[m+'-'+d];
+  // Movibles (Carnaval + Semana Santa)
+  const pascua = calcularPascua(date.getFullYear());
+  const ms = pascua.getTime(), dt = date.getTime();
+  const diff = Math.round((dt - ms) / 864e5);
+  if (diff === -48) return 'Lunes de Carnaval';
+  if (diff === -47) return 'Martes de Carnaval';
+  if (diff === -3) return 'Jueves Santo';
+  if (diff === -2) return 'Viernes Santo';
+  return 'Feriado';
+}
+
+function calMesAnterior() { calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; } renderCalendario(); }
+function calMesSiguiente() { calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; } renderCalendario(); }
+function calHoy() { const h = new Date(); calYear = h.getFullYear(); calMonth = h.getMonth(); renderCalendario(); }
+
+function renderCalendario() {
+  document.getElementById('cal-mes-titulo').textContent = MESES_NOMBRES[calMonth] + ' ' + calYear;
+  const grid = document.getElementById('cal-grid');
+  const filtroTipo = (document.getElementById('cal-filter-tipo') || {}).value || '';
+
+  // Construir eventos del mes
+  const primerDia = new Date(calYear, calMonth, 1);
+  const ultimoDia = new Date(calYear, calMonth + 1, 0);
+  const startPad = primerDia.getDay(); // 0=Dom
+  const totalDays = ultimoDia.getDate();
+
+  // Recopilar eventos (vacaciones aprobadas/en disfrute + reposos activos)
+  const eventos = {}; // key: 'YYYY-MM-DD' → [{nombre, tipo, cedula}]
+  const addEvento = (dateStr, nombre, tipo, cedula) => {
+    if (!eventos[dateStr]) eventos[dateStr] = [];
+    // Evitar duplicados del mismo trabajador en el mismo día
+    if (!eventos[dateStr].some(e => e.cedula === cedula && e.tipo === tipo)) {
+      eventos[dateStr].push({ nombre, tipo, cedula });
+    }
+  };
+
+  // Vacaciones
+  if (filtroTipo !== 'REP') {
+    solicitudes.forEach(sol => {
+      if (!sol.desde || !sol.hasta) return;
+      if (!['APROBADA','EN DISFRUTE','PENDIENTE','COMPLETADA'].includes(sol.estado)) return;
+      const d1 = parseFechaInput(sol.desde), d2 = parseFechaInput(sol.hasta);
+      if (!d1 || !d2) return;
+      const cur = new Date(d1);
+      while (cur <= d2) {
+        const key = formatFecha(cur);
+        addEvento(key, sol.nombre, 'vac', sol.cedula);
+        cur.setDate(cur.getDate() + 1);
+      }
+    });
+  }
+
+  // Reposos
+  if (filtroTipo !== 'VAC') {
+    reposos.forEach(rep => {
+      if (!rep.desde || !rep.hasta) return;
+      const d1 = parseFechaInput(rep.desde), d2 = parseFechaInput(rep.hasta);
+      if (!d1 || !d2) return;
+      const cur = new Date(d1);
+      while (cur <= d2) {
+        const key = formatFecha(cur);
+        addEvento(key, rep.nombre, 'rep', rep.cedula);
+        cur.setDate(cur.getDate() + 1);
+      }
+    });
+  }
+
+  const hoy = new Date();
+  const hoyStr = formatFecha(hoy);
+
+  // Generar HTML
+  let html = DIAS_SEMANA.map(d => `<div class="cal-hdr">${d}</div>`).join('');
+
+  // Días del mes anterior (padding)
+  const prevMonthLast = new Date(calYear, calMonth, 0).getDate();
+  for (let i = startPad - 1; i >= 0; i--) {
+    const dayNum = prevMonthLast - i;
+    html += `<div class="cal-day other-month"><span class="day-num">${dayNum}</span></div>`;
+  }
+
+  // Días del mes
+  for (let d = 1; d <= totalDays; d++) {
+    const dateObj = new Date(calYear, calMonth, d);
+    const dateStr = formatFecha(dateObj);
+    const isToday = dateStr === hoyStr;
+    const isFer = esFeriado(dateObj);
+    const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
+    let cls = 'cal-day';
+    if (isToday) cls += ' today';
+    if (isFer && !isWeekend) cls += ' feriado';
+
+    let ferTag = '';
+    if (isFer && !isWeekend) {
+      ferTag = `<span class="fer-tag" title="${nombreFeriado(dateObj)}">F</span>`;
+    }
+
+    const dayEvents = eventos[dateStr] || [];
+    let evHtml = '';
+    const maxShow = 3;
+    dayEvents.slice(0, maxShow).forEach(ev => {
+      const cls2 = ev.tipo === 'vac' ? 'vac' : 'rep';
+      const icon = ev.tipo === 'vac' ? '🏖' : '🏥';
+      evHtml += `<div class="cal-event ${cls2}" title="${ev.nombre}">${icon} ${ev.nombre.split(',')[0]}</div>`;
+    });
+    if (dayEvents.length > maxShow) {
+      evHtml += `<div class="cal-more">+${dayEvents.length - maxShow} más</div>`;
+    }
+
+    html += `<div class="${cls}" onclick="mostrarDetalleDia('${dateStr}')">
+      <span class="day-num">${d}${ferTag}</span>
+      ${evHtml}
+    </div>`;
+  }
+
+  // Padding final
+  const totalCells = startPad + totalDays;
+  const remaining = totalCells % 7 === 0 ? 0 : 7 - (totalCells % 7);
+  for (let i = 1; i <= remaining; i++) {
+    html += `<div class="cal-day other-month"><span class="day-num">${i}</span></div>`;
+  }
+
+  grid.innerHTML = html;
+}
+
+function mostrarDetalleDia(dateStr) {
+  const panel = document.getElementById('cal-detail-panel');
+  const body = document.getElementById('cal-detail-body');
+  const title = document.getElementById('cal-detail-title');
+
+  const parts = dateStr.split('-');
+  const fechaFmt = parts[2] + '/' + parts[1] + '/' + parts[0];
+  const dateObj = new Date(parseInt(parts[0]), parseInt(parts[1])-1, parseInt(parts[2]));
+  const diaSemana = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'][dateObj.getDay()];
+
+  let ferInfo = '';
+  if (esFeriado(dateObj)) {
+    ferInfo = ` — <span style="color:#C00;font-weight:bold;">FERIADO: ${nombreFeriado(dateObj)}</span>`;
+  }
+
+  title.innerHTML = `${diaSemana} ${fechaFmt}${ferInfo}`;
+
+  // Buscar eventos del día
+  const eventosVac = [];
+  const eventosRep = [];
+
+  solicitudes.forEach(sol => {
+    if (!sol.desde || !sol.hasta) return;
+    if (sol.desde <= dateStr && sol.hasta >= dateStr) {
+      eventosVac.push(sol);
+    }
+  });
+
+  reposos.forEach(rep => {
+    if (!rep.desde || !rep.hasta) return;
+    if (rep.desde <= dateStr && rep.hasta >= dateStr) {
+      eventosRep.push(rep);
+    }
+  });
+
+  if (eventosVac.length === 0 && eventosRep.length === 0) {
+    body.innerHTML = '<p style="color:#999;font-size:13px;">No hay trabajadores de vacaciones ni reposo este día.</p>';
+    panel.style.display = 'block';
+    return;
+  }
+
+  let html = '';
+  if (eventosVac.length > 0) {
+    html += `<h4 style="color:#1F4E79;margin-bottom:8px;">🏖 Vacaciones (${eventosVac.length})</h4>`;
+    html += '<table><thead><tr><th>Cédula</th><th>Nombre</th><th>Período</th><th>Desde</th><th>Hasta</th><th>Días</th><th>Estado</th></tr></thead><tbody>';
+    eventosVac.forEach(s => {
+      const badge = s.estado === 'EN DISFRUTE' ? 'badge-info' : s.estado === 'APROBADA' ? 'badge-ok' : 'badge-warn';
+      html += `<tr><td>${s.cedula}</td><td><strong>${s.nombre}</strong></td><td>${s.periodo||''}</td><td>${s.desde}</td><td>${s.hasta}</td><td>${s.dias||''}</td><td><span class="badge ${badge}">${s.estado}</span></td></tr>`;
+    });
+    html += '</tbody></table>';
+  }
+
+  if (eventosRep.length > 0) {
+    html += `<h4 style="color:#C00;margin:${eventosVac.length?'16px':'0'} 0 8px;">🏥 Reposos (${eventosRep.length})</h4>`;
+    html += '<table><thead><tr><th>Cédula</th><th>Nombre</th><th>Diagnóstico</th><th>Desde</th><th>Hasta</th><th>Días</th><th>Convalidado</th></tr></thead><tbody>';
+    eventosRep.forEach(r => {
+      const badge = r.convalidado === 'SI' ? 'badge-ok' : r.convalidado === 'NO' ? 'badge-danger' : 'badge-warn';
+      html += `<tr><td>${r.cedula}</td><td><strong>${r.nombre}</strong></td><td>${r.diagnostico||''}</td><td>${r.desde}</td><td>${r.hasta}</td><td>${r.dias||''}</td><td><span class="badge ${badge}">${r.convalidado||'EN PROCESO'}</span></td></tr>`;
+    });
+    html += '</tbody></table>';
+  }
+
+  body.innerHTML = html;
+  panel.style.display = 'block';
+}
+
+// ══════════════ INIT ══════════════
+document.getElementById('sol-fecha').value = new Date().toISOString().split('T')[0];
+
+// Load inline embedded data
+loadVacacionesData(window.__VACATION_DATA__);
+
+// Init renders
+renderReposos();
+renderHistorial();
+
+// Arranque: los datos se cargan solo con la sesión iniciada
+let _iniciado = false;
+firebase.auth().onAuthStateChanged(async u => {
+  if (!u) { document.getElementById('login-screen').style.display = 'flex'; return; }
+  isAdmin = true; activarSesion();
+  if (_iniciado) return; _iniciado = true;
+  try {
+    const nom = await db.collection('vac_nomina').get();
+    nom.forEach(d => { const x = d.data(); if (x.sueldo != null) sueldoData[d.id] = x.sueldo; nominaLookup[d.id] = { t: x.tipo || '', i: x.ingreso || '' }; });
+  } catch (e) { console.warn('Datos de nómina no disponibles:', e); }
+  await loadFromFirebase();
+  if (_firebaseLoaded) listenFirebase();
+});
+</script>
+</body>
+</html>

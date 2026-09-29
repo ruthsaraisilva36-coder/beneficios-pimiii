@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gestión Humana PIM III — Sistema unificado</title>
+<style>
+:root{--azul:#16467A;--azulc:#E6EEF7;--tinta:#1E2A36;--gris:#5E6B78;--linea:#D6DDE4;--fondo:#F3F5F7;
+--per:#2F6FB5;--vac:#0F8A7A;--ben:#C07A12;--rojo:#B3261E;--ambar:#8A5A00;--ambarbg:#FFF4DE;--verde:#2E7D32;--verdebg:#E8F3E9}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:var(--tinta);background:var(--fondo)}
+header{background:var(--azul);color:#fff;padding:14px 22px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+header h1{font-size:19px;margin:0}
+header p{margin:2px 0 0;font-size:12px;opacity:.85}
+.usr{font-size:12.5px;display:flex;gap:10px;align-items:center}
+.usr button{background:none;border:1px solid rgba(255,255,255,.6);color:#fff;border-radius:4px;padding:5px 10px;cursor:pointer;font-size:12px}
+main{max-width:1100px;margin:0 auto;padding:20px}
+.panel{background:#fff;border:1px solid var(--linea);border-radius:6px;padding:18px;margin-bottom:16px}
+h2{font-size:16px;margin:0 0 12px;color:var(--azul)}
+label{display:block;font-size:12px;color:var(--gris);margin:10px 0 4px}
+input{padding:9px 11px;border:1px solid var(--linea);border-radius:4px;font-size:14px;font-family:inherit;width:100%}
+input:focus,button:focus-visible,a:focus-visible{outline:2px solid var(--per);outline-offset:1px}
+.btn{padding:10px 18px;border:none;border-radius:4px;background:var(--azul);color:#fff;font-size:13px;font-weight:bold;cursor:pointer}
+.login{max-width:380px;margin:60px auto}
+.err{color:var(--rojo);font-size:12.5px;min-height:18px;margin-top:8px}
+.modulos{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;margin-bottom:16px}
+.mod{display:block;background:#fff;border:1px solid var(--linea);border-top:5px solid var(--c);border-radius:6px;padding:16px;text-decoration:none;color:inherit}
+.mod:hover{border-color:var(--c)}
+.mod h3{margin:0 0 6px;font-size:16px;color:var(--c)}
+.mod p{margin:0;font-size:12.5px;color:var(--gris);line-height:1.5}
+.estado{display:inline-block;margin-top:10px;font-size:11px;font-weight:bold;padding:2px 8px;border-radius:10px}
+.estado.u{background:var(--verdebg);color:var(--verde)} .estado.p{background:var(--ambarbg);color:var(--ambar)}
+.buscar{display:flex;gap:10px}
+.buscar input{max-width:260px}
+.exp{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-top:14px}
+.caja{border:1px solid var(--linea);border-left:4px solid var(--c);border-radius:4px;padding:12px 14px}
+.caja h4{margin:0 0 8px;font-size:13.5px;color:var(--c)}
+.dato{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:4px 0;border-bottom:1px dashed #EDF0F3}
+.dato span:first-child{color:var(--gris)}
+.dato span:last-child{text-align:right;font-weight:bold}
+.pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:bold;background:var(--ambarbg);color:var(--ambar)}
+.vacio{color:var(--gris);font-size:12.5px}
+table{border-collapse:collapse;width:100%;font-size:12.5px;margin-top:6px}
+th{background:#F3F5F7;text-align:left;padding:5px 6px;font-size:11.5px}
+td{padding:5px 6px;border-bottom:1px solid #EDF0F3}
+.oculto{display:none}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>Gestión Humana PIM III</h1><p>Personal · Vacaciones y Reposos · Beneficios — Chocó-Isidora</p></div>
+  <div class="usr oculto" id="usr"><span id="quien"></span><button id="salir">Salir</button></div>
+</header>
+
+<main>
+  <section class="panel login" id="p-login">
+    <h2>Entrar al sistema</h2>
+    <label for="correo">Correo</label><input id="correo" type="email" autocomplete="username">
+    <label for="clave">Contraseña</label><input id="clave" type="password" autocomplete="current-password">
+    <div style="margin-top:14px"><button class="btn" id="entrar">Entrar</button></div>
+    <div class="err" id="err"></div>
+  </section>
+
+  <div id="p-app" class="oculto">
+    <div class="modulos">
+      <a class="mod" href="vacaciones.html" style="--c:var(--vac)">
+        <h3>Vacaciones y Reposos</h3>
+        <p>Vacaciones vencidas, solicitudes con la planilla institucional, reposos, calendario, historial y Excel.</p>
+        <span class="estado u">En la base unificada</span>
+      </a>
+      <a class="mod" href="index.html" style="--c:var(--ben)">
+        <h3>Beneficios</h3>
+        <p>Carga familiar HCM, útiles escolares, apoyos institucionales, jornadas de entrega y descargas.</p>
+        <span class="estado u">En la base unificada</span>
+      </a>
+      <a class="mod" href="https://ruthsaraisilva36-coder.github.io/personal-choco-cvm/" target="_blank" rel="noopener" style="--c:var(--per)">
+        <h3>Personal</h3>
+        <p>Directorio, fichas, movimientos, ingresos, egresos y aprobaciones de cargo y adscripción.</p>
+        <span class="estado p">Sigue en su sistema actual por ahora</span>
+      </a>
+    </div>
+
+    <section class="panel">
+      <h2>Expediente del trabajador</h2>
+      <div class="buscar">
+        <input id="ced" inputmode="numeric" placeholder="Cédula, sin puntos">
+        <button class="btn" id="btn-buscar">Buscar</button>
+      </div>
+      <div id="exp"></div>
+    </section>
+  </div>
+</main>
+
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+import { getFirestore, doc, getDoc, collection, query, where, getDocs } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+const app=initializeApp({apiKey:"AIzaSyBJiS_a9CVKXXvWPZ85e4iBmDpFijM7y6Q",authDomain:"beneficio-pimiii-hcm-utiles.firebaseapp.com",projectId:"beneficio-pimiii-hcm-utiles",storageBucket:"beneficio-pimiii-hcm-utiles.firebasestorage.app",messagingSenderId:"691905699172",appId:"1:691905699172:web:b68e8be7947135e7abae71"});
+const auth=getAuth(app), db=getFirestore(app);
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/\s+/g,' ').trim();
+const fd=s=>{s=String(s||'');const m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);return m?m[3]+'/'+m[2]+'/'+m[1]:s;};
+const d=(l,v)=>`<div class="dato"><span>${l}</span><span>${esc(v)||'—'}</span></div>`;
+
+$('#entrar').onclick=()=>signInWithEmailAndPassword(auth,$('#correo').value.trim(),$('#clave').value).catch(()=>{$('#err').textContent='Correo o contraseña incorrectos.';});
+$('#clave').onkeydown=e=>{if(e.key==='Enter')$('#entrar').click();};
+$('#salir').onclick=()=>signOut(auth);
+onAuthStateChanged(auth,u=>{
+  $('#p-login').classList.toggle('oculto',!!u);$('#p-app').classList.toggle('oculto',!u);$('#usr').classList.toggle('oculto',!u);
+  if(u)$('#quien').textContent=u.email;
+});
+
+$('#ced').onkeydown=e=>{if(e.key==='Enter')buscar();};
+$('#btn-buscar').onclick=buscar;
+async function buscar(){
+  const c=$('#ced').value.replace(/\D/g,'');const out=$('#exp');
+  if(!c){out.innerHTML='<p class="vacio">Escribe una cédula.</p>';return;}
+  out.innerHTML='<p class="vacio">Buscando...</p>';
+  try{
+    const [p,b,v,s]=await Promise.all([getDoc(doc(db,'personal',c)),getDoc(doc(db,'trabajadores',c)),
+      getDocs(query(collection(db,'vac_vencidas'),where('c','==',c))),getDocs(query(collection(db,'vac_solicitudes'),where('cedula','==',c)))]);
+    const P=p.exists()?p.data():null,B=b.exists()?b.data():null,V=v.docs.map(x=>x.data()),S=s.docs.map(x=>x.data()).sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
+    if(!P&&!B&&!V.length&&!S.length){out.innerHTML='<p class="vacio">No hay ningún registro con esa cédula en los tres sistemas.</p>';return;}
+    const nombre=P?`${P.apellidos||''}, ${P.nombres||''}`:(V[0]?.n||B?.nom||'');
+    const cargoN=[...new Set(V.map(r=>r.g).filter(Boolean))].join(' / ');
+    const cargoF=P?.cargo||'';
+    const reg=cargoN&&cargoF&&!cargoN.split(' / ').some(x=>norm(x)===norm(cargoF));
+    out.innerHTML=`<h3 style="margin:16px 0 0;font-size:17px">${esc(nombre)} <span style="color:var(--gris);font-weight:normal;font-size:14px">C.I. ${c}</span> ${reg?'<span class="pill">Cargo por regularizar</span>':''}</h3>
+    <div class="exp">
+      <div class="caja" style="--c:var(--per)"><h4>Personal</h4>${P?d('Cargo según función',P.cargo)+d('Gerencia',P.gerencia)+d('Coordinación',P.coordinacion)+d('Ubicación',P.ubicacion)+d('Ingreso',fd(P.fechaIngreso))+d('Tipo de nómina',P.tipoNomina)+d('Estado',P.estado||'Activo')+'<p class="vacio" style="margin:8px 0 0">Copia del traslado; los cambios siguen en el sistema de Personal.</p>':'<p class="vacio">No está en Personal.</p>'}</div>
+      <div class="caja" style="--c:var(--vac)"><h4>Vacaciones</h4>${V.length?d('Cargo de nómina (Bs)',cargoN)+d('Ingreso (nómina)',V[0].i)+d('Sede',V[0].u)+
+        `<table><tr><th>Último período</th><th>Pendiente</th><th>Años vencidos</th></tr>${V.map(r=>`<tr><td>${esc(r.up)}</td><td>${esc(r.pp)}</td><td>${esc(r.tv)}</td></tr>`).join('')}</table>`:'<p class="vacio">No tiene filas de vacaciones vencidas.</p>'}
+        ${S.length?`<table><tr><th>Solicitud</th><th>Período</th><th>Desde</th><th>Hasta</th><th>Estado</th></tr>${S.map(x=>`<tr><td>${fd(x.fecha)}</td><td>${esc(x.periodo)}</td><td>${fd(x.desde)}</td><td>${fd(x.hasta)}</td><td>${esc(x.estado)}</td></tr>`).join('')}</table>`:''}</div>
+      <div class="caja" style="--c:var(--ben)"><h4>Beneficios</h4>${B?d('Estado',B.est)+d('Familiares',(B.fam||[]).length)+
+        ((B.fam||[]).length?`<table><tr><th>Parentesco</th><th>Nombre</th><th>Nacimiento</th></tr>${B.fam.map(f=>`<tr><td>${esc(f.par)}</td><td>${esc(f.nom)}</td><td>${fd(f.fnac)}</td></tr>`).join('')}</table>`:''):'<p class="vacio">No está en Beneficios.</p>'}</div>
+    </div>`;
+  }catch(e){out.innerHTML=`<p class="err">No se pudo buscar: ${esc(e.message)}</p>`;}
+}
+</script>
+</body>
+</html>
