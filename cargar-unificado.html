@@ -64,6 +64,10 @@ td{padding:7px 8px;border-bottom:1px solid #EDF0F3;vertical-align:top}
     <h2>3. Copiar a la base unificada</h2>
     <div id="previo"></div>
     <button class="btn verde" id="btn-cargar" disabled>Copiar a la base unificada</button>
+    <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--linea)">
+      <p class="muted">Solo para el paso de Personal: copia de nuevo <b>únicamente Personal</b> (fichas, fotos y movimientos) desde el sistema viejo. Vacaciones y Beneficios no se tocan.</p>
+      <button class="btn" id="btn-personal" disabled>Actualizar solo Personal</button>
+    </div>
     <div class="barra"><div id="prog"></div></div>
     <div id="log"></div>
     <div id="fin"></div>
@@ -153,6 +157,7 @@ function mostrar(prob){
     <label style="display:flex;gap:8px;align-items:center;color:var(--tinta);font-size:13px"><input type="checkbox" id="rehacer"> Entiendo, reemplazar la copia anterior</label>`
     :`<p class="muted">Se copia todo tal como está. Si una cédula aparece repetida o un cargo no coincide, se copia igual y lo revisas después en el sistema unificado.</p>`;
   const btn=$('#btn-cargar');btn.disabled=!listo||!!S.previa;
+  $('#btn-personal').disabled=!(n(S.personal)>0);
   if(S.previa)$('#rehacer').onchange=e=>{btn.disabled=!listo||!e.target.checked;};
 }
 
@@ -168,6 +173,25 @@ async function escribir(col,items,tam,avance){
     await b.commit();avance(Math.min(tam,items.length-i));
   }
 }
+
+$('#btn-personal').addEventListener('click',async()=>{
+  if(!confirm('Se reemplaza Personal en la base unificada con lo que tiene hoy el sistema viejo de Personal. Vacaciones y Beneficios no se tocan. Hazlo antes de empezar a registrar en el Personal unificado. ¿Continuar?'))return;
+  const btn=$('#btn-personal');btn.disabled=true;$('#log').textContent='';$('#fin').innerHTML='';
+  const personal=[],fotos=[];
+  Object.entries(S.personal).forEach(([k,w])=>{if(!w)return;const id=cedLimpia(w.cedula||k)||k;const {foto,...resto}=w;personal.push([id,{...resto,_clave:k}]);if(foto)fotos.push([id,{foto}]);});
+  const movs=Object.entries(S.movs);
+  const total=personal.length+fotos.length+movs.length;let hecho=0;const av=k=>{hecho+=k;$('#prog').style.width=Math.round(hecho/total*100)+'%';};
+  try{
+    log('Quitando la copia anterior de Personal...');for(const c of ['personal','personal_fotos','personal_movimientos'])await vaciar(c);
+    log('Personal: fichas...');await escribir('personal',personal,300,av);
+    log('Personal: fotos...');await escribir('personal_fotos',fotos,20,av);
+    log('Personal: movimientos...');await escribir('personal_movimientos',movs,400,av);
+    const filas=[];let bien=true;
+    for(const [c,e,n] of [['personal',personal.length,'Fichas de Personal'],['personal_fotos',fotos.length,'Fotos'],['personal_movimientos',movs.length,'Movimientos de Personal']]){const r=(await getCountFromServer(collection(db,c))).data().count;filas.push([n,e,r]);if(r!==e)bien=false;}
+    $('#prog').style.width='100%';log('Listo.');
+    $('#fin').innerHTML=`<div class="${bien?'bien':'mal'}">${bien?'<b>Personal actualizado y verificado.</b> Ya puedes trabajar en el Personal unificado.':'<b>Hay diferencias en la verificación.</b> Mándame una captura.'}</div><table><tr><th>Contenido</th><th>Leído</th><th>En la base unificada</th></tr>${filas.map(([n,e,r])=>`<tr><td>${n}</td><td>${e}</td><td class="${e===r?'ok':'err'}">${r}</td></tr>`).join('')}</table>`;
+  }catch(e){log('ERROR: '+e.message);$('#fin').innerHTML=`<div class="mal">Se detuvo: ${esc(e.message)}. Mándame una captura.</div>`;btn.disabled=false;}
+});
 
 $('#btn-cargar').addEventListener('click',async()=>{
   if(!confirm('Se va a copiar Personal y Vacaciones a la base unificada. Los sistemas actuales no se modifican. ¿Continuar?'))return;
