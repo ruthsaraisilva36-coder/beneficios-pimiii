@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Carga a la base unificada — Gestión Humana PIM III</title>
+<style>
+:root{--azul:#16467A;--azulc:#E6EEF7;--tinta:#1E2A36;--gris:#5E6B78;--linea:#D6DDE4;--fondo:#F3F5F7;
+--per:#2F6FB5;--vac:#0F8A7A;--ben:#C07A12;--rojo:#B3261E;--rojobg:#FBEAE9;--verde:#2E7D32;--verdebg:#E8F3E9;--ambar:#8A5A00;--ambarbg:#FFF4DE}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:var(--tinta);background:var(--fondo)}
+header{background:var(--azul);color:#fff;padding:14px 22px}
+header h1{font-size:18px;margin:0}
+header p{margin:2px 0 0;font-size:12px;opacity:.85}
+main{max-width:980px;margin:0 auto;padding:18px}
+.panel{background:#fff;border:1px solid var(--linea);border-radius:6px;padding:18px;margin-bottom:14px}
+h2{font-size:16px;margin:0 0 10px;color:var(--azul)}
+p,li{line-height:1.5}
+.muted{color:var(--gris);font-size:12.5px}
+label{display:block;font-size:12px;color:var(--gris);margin:10px 0 4px}
+input{padding:8px 10px;border:1px solid var(--linea);border-radius:4px;font-size:13px;font-family:inherit}
+input:focus,button:focus-visible{outline:2px solid var(--per);outline-offset:1px}
+.fila{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.btn{padding:10px 18px;border:none;border-radius:4px;background:var(--azul);color:#fff;font-size:13px;font-weight:bold;cursor:pointer}
+.btn:disabled{opacity:.45;cursor:default}
+.btn.verde{background:var(--verde)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{background:var(--azul);color:#fff;text-align:left;padding:7px 8px}
+td{padding:7px 8px;border-bottom:1px solid #EDF0F3;vertical-align:top}
+.sis{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
+.ok{color:var(--verde);font-weight:bold}.err{color:var(--rojo);font-weight:bold}.av{color:var(--ambar);font-weight:bold}
+.aviso{background:var(--ambarbg);border-left:4px solid var(--ambar);padding:10px 12px;border-radius:4px;font-size:13px;margin:10px 0}
+.bien{background:var(--verdebg);border-left:4px solid var(--verde);padding:10px 12px;border-radius:4px;font-size:13px;margin:10px 0}
+.mal{background:var(--rojobg);border-left:4px solid var(--rojo);padding:10px 12px;border-radius:4px;font-size:13px;margin:10px 0}
+.barra{height:10px;background:#EDF0F3;border-radius:5px;overflow:hidden;margin:8px 0}
+.barra div{height:100%;width:0;background:var(--verde);transition:width .2s}
+#log{font-size:12.5px;color:var(--gris);max-height:240px;overflow:auto;background:#FAFBFC;border:1px solid var(--linea);border-radius:4px;padding:8px 10px;white-space:pre-wrap}
+.oculto{display:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>Carga a la base unificada</h1>
+  <p>Copia Personal y Vacaciones a la base de Gestión Humana PIM III. Los sistemas actuales no se modifican.</p>
+</header>
+<main>
+  <section class="panel">
+    <h2>1. Iniciar sesión</h2>
+    <p class="muted">La base unificada está en el proyecto de Beneficios, que ya tiene inicio de sesión. Beneficios queda tal como está: solo se agregan Personal y Vacaciones a su lado.</p>
+    <div class="fila">
+      <div><label for="correo">Correo</label><input id="correo" type="email" autocomplete="username" style="width:280px"></div>
+      <div><label for="clave">Contraseña</label><input id="clave" type="password" autocomplete="current-password" style="width:200px"></div>
+      <button class="btn" id="btn-leer">Iniciar sesión y revisar</button>
+    </div>
+    <p id="msg-login"></p>
+  </section>
+
+  <section class="panel oculto" id="p-rev">
+    <h2>2. Revisar lo que se va a copiar</h2>
+    <div id="rev"></div>
+  </section>
+
+  <section class="panel oculto" id="p-carga">
+    <h2>3. Copiar a la base unificada</h2>
+    <div id="previo"></div>
+    <button class="btn verde" id="btn-cargar" disabled>Copiar a la base unificada</button>
+    <div class="barra"><div id="prog"></div></div>
+    <div id="log"></div>
+    <div id="fin"></div>
+  </section>
+</main>
+
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import { getAuth, signInWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+import { getFirestore, collection, doc, getDoc, getDocs, writeBatch, getCountFromServer, serverTimestamp }
+  from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+import { getDatabase, ref, get } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
+
+const CFG_U={apiKey:"AIzaSyBJiS_a9CVKXXvWPZ85e4iBmDpFijM7y6Q",authDomain:"beneficio-pimiii-hcm-utiles.firebaseapp.com",projectId:"beneficio-pimiii-hcm-utiles",storageBucket:"beneficio-pimiii-hcm-utiles.firebasestorage.app",messagingSenderId:"691905699172",appId:"1:691905699172:web:b68e8be7947135e7abae71"};
+const CFG_P={apiKey:"AIzaSyCsi_mV-I8liJHdqcPVDXBMXjzOpXmfT3s",authDomain:"personal-choco-cvm.firebaseapp.com",databaseURL:"https://personal-choco-cvm-default-rtdb.firebaseio.com",projectId:"personal-choco-cvm",appId:"1:324713522900:web:0dcbb6e63114755be0bd41"};
+const URL_VAC='https://ruthsaraisilva36-coder.github.io/sistema-vacaciones-cvm/';
+
+const appU=initializeApp(CFG_U,'unificado'), appP=initializeApp(CFG_P,'personal');
+const auth=getAuth(appU), db=getFirestore(appU), rtdb=getDatabase(appP);
+
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const cedLimpia=c=>String(c??'').replace(/\D/g,'');
+const leerLocal=k=>{try{return JSON.parse(localStorage.getItem(k)||'null');}catch(e){return null;}};
+const fd=s=>{s=String(s||'');const m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);return m?m[3]+'/'+m[2]+'/'+m[1]:s;};
+const n=x=>Array.isArray(x)?x.length:(x&&typeof x==='object')?Object.keys(x).length:0;
+function log(t){$('#log').textContent+=t+'\n';$('#log').scrollTop=1e9;}
+
+/* Firestore no admite listas dentro de listas ni valores undefined */
+function limpio(v){
+  if(v===undefined)return null;
+  if(Array.isArray(v))return v.map(x=>Array.isArray(x)?Object.fromEntries(x.map((y,i)=>[String(i),limpio(y)])):limpio(x));
+  if(v&&typeof v==='object'){const o={};for(const [k,x] of Object.entries(v)){if(x!==undefined)o[k]=limpio(x);}return o;}
+  return v;
+}
+
+let S=null; // lo leído de los sistemas actuales
+
+$('#btn-leer').addEventListener('click',async()=>{
+  const b=$('#btn-leer');b.disabled=true;b.textContent='Revisando...';$('#msg-login').innerHTML='';
+  try{await signInWithEmailAndPassword(auth,$('#correo').value.trim(),$('#clave').value);}
+  catch(e){$('#msg-login').innerHTML='<span class="err">No se pudo iniciar sesión. Revisa el correo y la contraseña.</span>';b.disabled=false;b.textContent='Iniciar sesión y revisar';return;}
+  S={};const prob=[];
+  /* Personal */
+  try{const [p,m]=await Promise.all([get(ref(rtdb,'personal')),get(ref(rtdb,'movimientos'))]);S.personal=p.val()||{};S.movs=m.val()||{};}
+  catch(e){prob.push('Personal: no se pudo leer ('+e.message+').');}
+  /* Vacaciones: copia de este navegador */
+  S.sol=leerLocal('cvm_solicitudes');S.rep=leerLocal('cvm_reposos');S.venc=leerLocal('cvm_vacaciones_data');
+  S.ed=leerLocal('cvm_vacaciones_ediciones_v2')||{};S.nuevos=leerLocal('cvm_vacaciones_nuevos')||[];
+  if(!Array.isArray(S.venc)||!S.venc.length)prob.push('Vacaciones: este navegador no tiene la copia del sistema. Abre esta página en la computadora y el navegador donde usas el sistema de vacaciones.');
+  /* Datos de nómina (tipo de personal, ingreso y sueldo) publicados con el sistema de vacaciones */
+  try{const h=await (await fetch(URL_VAC,{cache:'no-store'})).text();
+    const saca=nom=>{const i=h.indexOf(nom);if(i<0)return {};const ini=h.indexOf('{',i);const fin=h.indexOf('};',ini);return JSON.parse(h.slice(ini,fin+1));};
+    S.sueldo=saca('window.__SALARY_DATA__ = ');S.nomina=saca('window.__NOMINA_LOOKUP__ = ');}
+  catch(e){S.sueldo={};S.nomina={};prob.push('No se pudieron leer los datos de nómina del sistema de vacaciones ('+e.message+').');}
+  /* Beneficios (ya está en la base) */
+  try{S.ben=(await getCountFromServer(collection(db,'trabajadores'))).data().count;}catch(e){S.ben='?';}
+  /* ¿ya se cargó antes? */
+  try{const m=await getDoc(doc(db,'unificado','migracion'));S.previa=m.exists()?m.data():null;}catch(e){S.previa=null;}
+  b.textContent='Volver a revisar';b.disabled=false;
+  mostrar(prob);
+});
+
+function mostrar(prob){
+  $('#p-rev').classList.remove('oculto');
+  const sol=Array.isArray(S.sol)?S.sol:[],rep=Array.isArray(S.rep)?S.rep:[];
+  const fechas=sol.map(s=>s.fecha||'').filter(Boolean).sort();const ult=fechas[fechas.length-1]||'';
+  const despues=sol.filter(s=>(s.fecha||'')>='2026-09-05').length;
+  const fotos=Object.values(S.personal||{}).filter(w=>w&&w.foto).length;
+  $('#rev').innerHTML=`
+  ${prob.length?`<div class="mal">${prob.map(esc).join('<br>')}</div>`:''}
+  <table>
+    <tr><th>Sistema</th><th>Qué se copia</th><th>Cantidad</th></tr>
+    <tr><td><span class="sis" style="background:var(--per)"></span>Personal</td><td>Fichas de trabajadores${fotos?` (${fotos} con foto)`:''}</td><td>${n(S.personal)}</td></tr>
+    <tr><td></td><td>Movimientos (ingresos, egresos, cambios)</td><td>${n(S.movs)}</td></tr>
+    <tr><td><span class="sis" style="background:var(--vac)"></span>Vacaciones</td><td>Filas de vacaciones vencidas</td><td>${n(S.venc)}</td></tr>
+    <tr><td></td><td>Solicitudes de vacaciones</td><td>${sol.length}</td></tr>
+    <tr><td></td><td>Reposos</td><td>${rep.length}</td></tr>
+    <tr><td></td><td>Ediciones manuales y registros agregados</td><td>${n(S.ed)} y ${n(S.nuevos)}</td></tr>
+    <tr><td></td><td>Datos de nómina: tipo de personal, ingreso y sueldo</td><td>${n(S.nomina)}</td></tr>
+    <tr><td><span class="sis" style="background:var(--ben)"></span>Beneficios</td><td>Ya está en la base unificada; no se copia ni se toca</td><td>${S.ben}</td></tr>
+  </table>
+  ${sol.length?`<div class="${despues?'bien':'aviso'}">La solicitud más reciente en este navegador tiene fecha <b>${fd(ult)}</b>. Hay <b>${despues}</b> solicitudes con fecha del 05/09/2026 en adelante. Compáralas con tu Excel de solicitudes por cargar antes de seguir.</div>`:''}`;
+  const listo=n(S.personal)>0&&n(S.venc)>0;
+  $('#p-carga').classList.remove('oculto');
+  $('#previo').innerHTML=S.previa?`<div class="aviso">Ya se hizo una copia el <b>${esc(S.previa.fechaTexto||'')}</b> desde "${esc(S.previa.quien||'')}". Si copias de nuevo, lo copiado se reemplaza con lo que ves arriba. Hazlo solo si todavía no has empezado a trabajar en el sistema unificado.</div>
+    <label style="display:flex;gap:8px;align-items:center;color:var(--tinta);font-size:13px"><input type="checkbox" id="rehacer"> Entiendo, reemplazar la copia anterior</label>`
+    :`<p class="muted">Se copia todo tal como está. Si una cédula aparece repetida o un cargo no coincide, se copia igual y lo revisas después en el sistema unificado.</p>`;
+  const btn=$('#btn-cargar');btn.disabled=!listo||!!S.previa;
+  if(S.previa)$('#rehacer').onchange=e=>{btn.disabled=!listo||!e.target.checked;};
+}
+
+async function vaciar(col){
+  const s=await getDocs(collection(db,col));let b=writeBatch(db),k=0;
+  for(const d of s.docs){b.delete(d.ref);if(++k%400===0){await b.commit();b=writeBatch(db);}}
+  if(k%400)await b.commit();return k;
+}
+async function escribir(col,items,tam,avance){
+  for(let i=0;i<items.length;i+=tam){
+    const b=writeBatch(db);
+    items.slice(i,i+tam).forEach(([id,datos])=>b.set(doc(db,col,id),limpio(datos)));
+    await b.commit();avance(Math.min(tam,items.length-i));
+  }
+}
+
+$('#btn-cargar').addEventListener('click',async()=>{
+  if(!confirm('Se va a copiar Personal y Vacaciones a la base unificada. Los sistemas actuales no se modifican. ¿Continuar?'))return;
+  const btn=$('#btn-cargar');btn.disabled=true;$('#log').textContent='';$('#fin').innerHTML='';
+  const quien=prompt('¿Desde qué computadora estás copiando? (ej.: Ruth - oficina)','')||'';
+  const personal=[],fotos=[];
+  Object.entries(S.personal).forEach(([k,w])=>{if(!w)return;const id=cedLimpia(w.cedula||k)||k;const {foto,...resto}=w;personal.push([id,{...resto,_clave:k}]);if(foto)fotos.push([id,{foto}]);});
+  const movs=Object.entries(S.movs).map(([k,m])=>[k,m]);
+  const venc=S.venc.map((r,i)=>['v'+String(i+1).padStart(5,'0'),{...r,orden:i+1}]);
+  const sol=(S.sol||[]).map(s=>[String(s.id),s]);
+  const rep=(S.rep||[]).map(r=>[String(r.id),r]);
+  const ceds=new Set([...Object.keys(S.nomina),...Object.keys(S.sueldo)]);
+  const nom=[...ceds].map(c=>[c,{tipo:S.nomina[c]?.t||'',ingreso:S.nomina[c]?.i||'',sueldo:S.sueldo[c]??null}]);
+  const total=personal.length+fotos.length+movs.length+venc.length+sol.length+rep.length+nom.length+2;
+  let hecho=0;const av=k=>{hecho+=k;$('#prog').style.width=Math.round(hecho/total*100)+'%';};
+  try{
+    if(S.previa){log('Quitando la copia anterior...');
+      for(const c of ['personal','personal_fotos','personal_movimientos','vac_vencidas','vac_solicitudes','vac_reposos','vac_nomina'])await vaciar(c);}
+    log('Personal: fichas...');await escribir('personal',personal,300,av);
+    log('Personal: fotos...');await escribir('personal_fotos',fotos,20,av);
+    log('Personal: movimientos...');await escribir('personal_movimientos',movs,400,av);
+    log('Vacaciones: vencidas...');await escribir('vac_vencidas',venc,400,av);
+    log('Vacaciones: solicitudes...');await escribir('vac_solicitudes',sol,300,av);
+    log('Vacaciones: reposos...');await escribir('vac_reposos',rep,400,av);
+    log('Vacaciones: datos de nómina...');await escribir('vac_nomina',nom,400,av);
+    log('Vacaciones: ediciones y registros agregados...');
+    await escribir('vac_config',[['ediciones_v2',{data:S.ed}],['nuevos',{data:S.nuevos}]],2,av);
+    /* verificación */
+    log('Verificando...');
+    const esperado={personal:personal.length,personal_fotos:fotos.length,personal_movimientos:movs.length,vac_vencidas:venc.length,vac_solicitudes:sol.length,vac_reposos:rep.length,vac_nomina:nom.length};
+    const filas=[];let bien=true;
+    for(const [c,e] of Object.entries(esperado)){const r=(await getCountFromServer(collection(db,c))).data().count;filas.push([c,e,r]);if(r!==e)bien=false;}
+    const ahora=new Date();
+    const b=writeBatch(db);
+    b.set(doc(db,'unificado','migracion'),{fecha:serverTimestamp(),fechaTexto:ahora.toLocaleString('es-VE'),quien,por:auth.currentUser.email,conteos:esperado,
+      origenVacaciones:'copia del navegador',solicitudMasReciente:(S.sol||[]).map(s=>s.fecha||'').sort().pop()||''});
+    await b.commit();
+    const nombres={personal:'Fichas de Personal',personal_fotos:'Fotos',personal_movimientos:'Movimientos de Personal',vac_vencidas:'Vacaciones vencidas',vac_solicitudes:'Solicitudes de vacaciones',vac_reposos:'Reposos',vac_nomina:'Datos de nómina'};
+    $('#prog').style.width='100%';log('Listo.');
+    $('#fin').innerHTML=`<div class="${bien?'bien':'mal'}">${bien?'<b>Copia completa y verificada.</b> Todo lo copiado coincide con lo leído.':'<b>Hay diferencias en la verificación.</b> Mándame una captura de esta pantalla.'}</div>
+      <table><tr><th>Contenido</th><th>Leído</th><th>En la base unificada</th></tr>${filas.map(([c,e,r])=>`<tr><td>${nombres[c]}</td><td>${e}</td><td class="${e===r?'ok':'err'}">${r}</td></tr>`).join('')}</table>`;
+  }catch(e){log('ERROR: '+e.message);$('#fin').innerHTML=`<div class="mal">La copia se detuvo: ${esc(e.message)}. Los sistemas actuales no se tocaron. Mándame una captura de esta pantalla.</div>`;btn.disabled=false;}
+});
+</script>
+</body>
+</html>
