@@ -2024,7 +2024,8 @@ function agregarAVacacionesVencidas(sol) {
   periodos.forEach(p => { if (yaOtorgados.indexOf(p) < 0) yaOtorgados.push(p); });
   yaOtorgados.sort();
 
-  if (upYear) { reg.up = upYear; reg.pp = ppNuevo; }
+  // Solo avanza el último período disfrutado: una solicitud de un período anterior no lo hace retroceder
+  if (upYear && (!(parseInt(reg.up) > 0) || parseInt(upYear) > parseInt(reg.up))) { reg.up = upYear; reg.pp = ppNuevo; }
   reg.po = yaOtorgados.join(' / ');
   reg.dOt = String(parseInt(reg.dOt || 0) + (parseInt(sol.dias) || 0));
   reg.tv = calcularAnosVencidos(reg.up, reg.i || sol.ingreso);
