@@ -42,7 +42,7 @@ tr:hover td{background:#FAFBFC}
 </head>
 <body>
 <header>
-  <div><h1><a href="sistema.html" title="Volver al menú">&larr; GH PIM III</a> | Diferencia de cargos</h1><p>Cargo según función (Personal) frente al cargo de la nómina en bolívares (Vacaciones)</p></div>
+  <div><h1><a href="sistema.html" title="Volver al menú">&larr; GH PIM III</a> | Diferencia de cargos</h1><p>Cargo según función (Personal) frente al cargo de la nómina en bolívares</p></div>
   <div class="usr oculto" id="usr"><span id="quien"></span><button id="salir">Salir</button></div>
 </header>
 <main>
@@ -54,6 +54,13 @@ tr:hover td{background:#FAFBFC}
     <div class="err" id="err"></div>
   </section>
   <div id="p-app" class="oculto">
+    <section class="panel" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+      <div><div style="font-weight:bold;color:var(--azul)">Nómina en bolívares usada para comparar</div><div class="muted" id="fuente">—</div></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="file" id="archivo" accept=".xls,.xlsx" style="display:none">
+        <button class="btn sec" id="btn-cargar">Cargar nómina en Bs (Excel)</button>
+      </div>
+    </section>
     <div class="kpis" id="kpis"></div>
     <section class="panel">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
@@ -65,25 +72,27 @@ tr:hover td{background:#FAFBFC}
         <select id="f-sede"><option value="">Ambas sedes</option><option>Planta Chocó</option><option>Mina Isidora</option></select>
         <select id="f-ger"><option value="">Todas las gerencias</option></select>
         <select id="f-nom"><option value="">Todos los tipos de nómina</option></select>
+        <select id="f-ant" title="Antigüedad mínima de los contratados"><option value="0">Contratados: todos</option><option value="3">Contratados con más de 3 meses</option><option value="6">Contratados con más de 6 meses</option><option value="12" selected>Contratados con más de 1 año</option><option value="24">Contratados con más de 2 años</option><option value="36">Contratados con más de 3 años</option></select>
       </div>
       <div class="muted" id="conteo" style="margin-bottom:8px"></div>
-      <div class="tw"><table><thead><tr><th>Cédula</th><th>Trabajador</th><th>Sede</th><th>Gerencia / Coordinación</th><th>Tipo de nómina</th><th>Cargo según función</th><th>Cargo de nómina (Bs)</th><th>Situación</th></tr></thead><tbody id="tb"></tbody></table></div>
-      <p class="muted" style="margin-top:8px">Solo lectura. Se consideran los trabajadores activos, de vacaciones o suspendidos de Personal; los egresados y los contratos culminados no se incluyen. Para corregir un cargo, hazlo en Personal (cargo según función) o en Vacaciones (cargo de nómina).</p>
+      <div class="tw"><table><thead><tr><th>Cédula</th><th>Trabajador</th><th>Sede</th><th>Gerencia / Coordinación</th><th>Tipo de nómina</th><th>Cargo según función</th><th>Cargo de nómina (Bs)</th><th>Ingreso</th><th>Antigüedad</th><th>Situación</th></tr></thead><tbody id="tb"></tbody></table></div>
+      <p class="muted" style="margin-top:8px">Solo lectura. Al cargar la nómina solo se guardan cédula, nombre, cargo, tipo de nómina, unidad, fecha de ingreso y ubicación: no se guardan sueldos ni cuentas bancarias. Se consideran los trabajadores activos, de vacaciones o suspendidos de Personal; los egresados y los contratos culminados no se incluyen. Para corregir un cargo, hazlo en Personal (cargo según función) o en Vacaciones (cargo de nómina).</p>
     </section>
   </div>
 </main>
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
-import { getFirestore, collection, getDocs } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+import { getFirestore, collection, getDocs, doc, getDoc, setDoc } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 const app=initializeApp({apiKey:"AIzaSyBJiS_a9CVKXXvWPZ85e4iBmDpFijM7y6Q",authDomain:"beneficio-pimiii-hcm-utiles.firebaseapp.com",projectId:"beneficio-pimiii-hcm-utiles",storageBucket:"beneficio-pimiii-hcm-utiles.firebasestorage.app",messagingSenderId:"691905699172",appId:"1:691905699172:web:b68e8be7947135e7abae71"});
 const auth=getAuth(app), db=getFirestore(app);
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
 const ced=s=>String(s||'').replace(/\D/g,'');
-const SIT={ok:['Coincide','p-ok'],dif:['Por regularizar','p-dif'],con:['Contratado en nómina','p-con'],sinN:['Sin cargo de nómina','p-sin'],sinF:['Sin cargo según función','p-sin']};
-let FILAS=[], filtroSit='dif';
+const SIT={ok:['Coincide','p-ok'],dif:['Cargo distinto','p-dif'],con:['Contratado','p-con'],sinN:['No está en la nómina','p-sin'],sinF:['Sin cargo según función','p-sin'],sinP:['No está en Personal','p-sin']};
+let NOM=null, FUENTE='';
+let FILAS=[], filtroSit='reg';
 
 $('#entrar').onclick=()=>signInWithEmailAndPassword(auth,$('#correo').value.trim(),$('#clave').value).catch(()=>{$('#err').textContent='Correo o contraseña incorrectos.';});
 $('#clave').onkeydown=e=>{if(e.key==='Enter')$('#entrar').click();};
@@ -95,27 +104,40 @@ onAuthStateChanged(auth,u=>{
 });
 
 function sede(w){const u=norm(w.ubicacion);if(u.includes('ISIDORA'))return 'Mina Isidora';if(u.includes('CHOCO'))return 'Planta Chocó';return norm(w.gerencia).includes('ISIDORA')?'Mina Isidora':'Planta Chocó';}
+const mesesDesde=f=>{if(!f)return null;const m=String(f).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/)||String(f).match(/(\d{4})-(\d{2})-(\d{2})/);if(!m)return null;const d=m[3].length===4?new Date(+m[3],m[2]-1,+m[1]):new Date(+m[1],m[2]-1,+m[3]);return (Date.now()-d)/(86400000*30.44);};
+const antTxt=m=>{if(m==null)return '';if(m<12)return Math.floor(m)+' mes(es)';const a=Math.floor(m/12),r=Math.floor(m%12);return a+' año(s)'+(r?' y '+r+' mes(es)':'');};
 async function cargar(){
   $('#conteo').textContent='Cargando datos...';
   try{
-    const [p,v]=await Promise.all([getDocs(collection(db,'personal')),getDocs(collection(db,'vac_vencidas'))]);
+    const [p,nd]=await Promise.all([getDocs(collection(db,'personal')),getDoc(doc(db,'nomina_bs','actual'))]);
     const nom={};
-    v.docs.forEach(d=>{const x=d.data();const c=ced(x.c);if(!c)return;(nom[c]=nom[c]||new Set());if(x.g&&String(x.g).trim())nom[c].add(String(x.g).trim().toUpperCase());});
-    FILAS=[];
+    if(nd.exists()){
+      const x=nd.data();NOM=x;
+      FUENTE=`${x.periodo||'Nómina'} · ${x.filas.length} trabajadores · cargada por ${x.cargadoPor||'—'} el ${x.cargadoEl||''}`;
+      x.filas.forEach(r=>{nom[r.c]=r;});
+    }else{
+      FUENTE='Aún no se ha cargado la nómina en bolívares. Se usa el cargo que tiene el módulo de Vacaciones.';
+      const v=await getDocs(collection(db,'vac_vencidas'));
+      v.docs.forEach(d=>{const x=d.data();const c=ced(x.c);if(!c)return;if(!nom[c])nom[c]={c,cargo:'',n:x.n||'',ing:x.i||''};if(x.g&&!nom[c].cargo)nom[c].cargo=String(x.g).trim().toUpperCase();});
+    }
+    $('#fuente').textContent=FUENTE;
+    FILAS=[];const vistos=new Set();
     p.docs.forEach(d=>{
       const w=d.data();const est=w.estado||'Activo';
       if(est==='Egresado'||est==='Contrato culminado')return;
-      const c=ced(w.cedula||d.id);
+      const c=ced(w.cedula||d.id);vistos.add(c);
       const cf=String(w.cargo||'').trim().toUpperCase();
-      const cn=[...(nom[c]||[])];
+      const r=nom[c];const cn=r?String(r.cargo||'').trim().toUpperCase():'';
       let s;
-      if(!cf) s='sinF';
-      else if(!cn.length) s='sinN';
-      else if(cn.some(x=>norm(x)===norm(cf))) s='ok';
-      else if(cn.every(x=>norm(x)==='CONTRATADO')) s='con';
+      if(!r) s='sinN';
+      else if(norm(cn)==='CONTRATADO') s='con';
+      else if(!cf) s='sinF';
+      else if(norm(cn)===norm(cf)) s='ok';
       else s='dif';
-      FILAS.push({c,nombre:`${w.apellidos||''}, ${w.nombres||''}`.replace(/^, |, $/,''),sede:sede(w),ger:w.gerencia||'',coord:w.coordinacion||'',nomina:w.tipoNomina||'',cf,cn:cn.join(' / '),s,est});
+      const m=mesesDesde(r&&r.ing);
+      FILAS.push({c,nombre:`${w.apellidos||''}, ${w.nombres||''}`.replace(/^, |, $/,''),sede:sede(w),ger:w.gerencia||'',coord:w.coordinacion||'',nomina:w.tipoNomina||(r&&r.tipo)||'',cf,cn,ing:(r&&r.ing)||'',meses:m,s,est});
     });
+    if(NOM) NOM.filas.forEach(r=>{ if(vistos.has(r.c))return; FILAS.push({c:r.c,nombre:r.n||'',sede:norm(r.ubic).includes('ISIDORA')?'Mina Isidora':'Planta Chocó',ger:r.unidad||'',coord:'',nomina:r.tipo||'',cf:'',cn:String(r.cargo||'').toUpperCase(),ing:r.ing||'',meses:mesesDesde(r.ing),s:'sinP',est:'Activo'}); });
     FILAS.sort((a,b)=>a.nombre.localeCompare(b.nombre));
     const gers=[...new Set(FILAS.map(f=>f.ger).filter(Boolean))].sort();
     $('#f-ger').innerHTML='<option value="">Todas las gerencias</option>'+gers.map(g=>`<option>${esc(g)}</option>`).join('');
@@ -124,27 +146,54 @@ async function cargar(){
     pintar();
   }catch(e){$('#conteo').innerHTML=`<span class="err">No se pudieron leer los datos: ${esc(e.message)}</span>`;}
 }
+// ── Cargar la nómina en bolívares (se guardan solo los datos necesarios) ──
+$('#btn-cargar').onclick=()=>$('#archivo').click();
+$('#archivo').onchange=async e=>{
+  const f=e.target.files[0];e.target.value='';if(!f)return;
+  if(typeof XLSX==='undefined'){alert('No se pudo cargar la librería de Excel.');return;}
+  try{
+    const wb=XLSX.read(await f.arrayBuffer(),{type:'array'});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const A=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,defval:''});
+    const hi=A.findIndex(r=>r.some(x=>norm(x)==='CEDULA')&&r.some(x=>norm(x)==='CARGO'));
+    if(hi<0){alert('No encontré la fila de encabezados con "Cédula" y "Cargo". Revisa que sea la nómina consolidada en bolívares.');return;}
+    const H=A[hi].map(norm), col=n=>H.findIndex(h=>h===n||h.startsWith(n));
+    const iC=col('CEDULA'),iN=col('APELLIDOS Y NOMBRES'),iG=col('CARGO'),iT=col('TIPO DE NOMINA'),iU=col('UNIDAD ADSCRIPCION'),iI=col('FECHA INGRESO'),iF=col('UBICACION FISICA');
+    const periodo=(A.slice(0,hi).flat().find(x=>/per[ií]odo/i.test(String(x)))||'').toString().trim();
+    const vistos=new Set(),filas=[];
+    A.slice(hi+1).forEach(r=>{const c=ced(r[iC]);if(!c||c.length<5||vistos.has(c))return;vistos.add(c);
+      filas.push({c,n:String(r[iN]||'').trim(),cargo:String(r[iG]||'').trim().toUpperCase(),tipo:iT>=0?String(r[iT]||'').trim():'',unidad:iU>=0?String(r[iU]||'').trim():'',ing:iI>=0?String(r[iI]||'').trim():'',ubic:iF>=0?String(r[iF]||'').trim():''});});
+    if(!filas.length){alert('El archivo no tiene trabajadores.');return;}
+    const conC=filas.filter(x=>x.cargo).length;
+    if(!confirm(`Nómina: ${periodo||f.name}\nTrabajadores: ${filas.length} (${conC} con cargo)\n\nSe reemplaza la nómina que se usa para comparar. Solo se guardan cédula, nombre, cargo, tipo de nómina, unidad, ingreso y ubicación. ¿Continuar?`))return;
+    const h=new Date();h.setMinutes(h.getMinutes()-h.getTimezoneOffset());
+    await setDoc(doc(db,'nomina_bs','actual'),{periodo:periodo||f.name,archivo:f.name,cargadoPor:auth.currentUser?.email||'',cargadoEl:h.toISOString().slice(0,10).split('-').reverse().join('/'),filas});
+    await cargar();
+  }catch(err){alert('No se pudo leer o guardar la nómina: '+err.message);}
+};
 function filtradas(ignorarSit){
-  const q=norm($('#q').value),fs=$('#f-sede').value,fg=$('#f-ger').value,fn=$('#f-nom').value;
-  return FILAS.filter(f=>(ignorarSit||!filtroSit||f.s===filtroSit)&&(!fs||f.sede===fs)&&(!fg||f.ger===fg)&&(!fn||f.nomina===fn)&&(!q||norm(f.c+' '+f.nombre+' '+f.cf+' '+f.cn).includes(q)));
+  const q=norm($('#q').value),fs=$('#f-sede').value,fg=$('#f-ger').value,fn=$('#f-nom').value,fa=+$('#f-ant').value;
+  return FILAS.filter(f=>(ignorarSit||!filtroSit||f.s===filtroSit||(filtroSit==='reg'&&(f.s==='dif'||f.s==='con')))&&(ignorarSit||f.s!=='con'||!fa||(f.meses!=null&&f.meses>=fa))&&(!fs||f.sede===fs)&&(!fg||f.ger===fg)&&(!fn||f.nomina===fn)&&(!q||norm(f.c+' '+f.nombre+' '+f.cf+' '+f.cn).includes(q)));
 }
 function pintar(){
   const base=filtradas(true);
-  const n=k=>base.filter(f=>f.s===k).length;
-  const k=[['',`Total`,base.length,'var(--tinta)'],['dif','Por regularizar',n('dif'),'var(--ambar)'],['ok','Coinciden',n('ok'),'var(--verde)'],['con','Contratado en nómina',n('con'),'var(--azul)'],['sinN','Sin cargo de nómina',n('sinN'),'var(--gris)'],['sinF','Sin cargo según función',n('sinF'),'var(--gris)']];
+  const faK=+$('#f-ant').value;
+  const n=k=>base.filter(f=>f.s===k&&(k!=='con'||!faK||(f.meses!=null&&f.meses>=faK))).length;
+  const fa=+$('#f-ant').value, antL=$('#f-ant').selectedOptions[0].text.replace('Contratados: todos','todos').replace('Contratados con ','');
+  const k=[['','Total',base.length,'var(--tinta)'],['reg','Por regularizar (total)',n('dif')+n('con'),'var(--rojo)'],['dif','Cargo distinto',n('dif'),'var(--ambar)'],['con','Contratados ('+antL+')',n('con'),'var(--azul)'],['ok','Coinciden',n('ok'),'var(--verde)'],['sinN','No están en la nómina',n('sinN'),'var(--gris)'],['sinP','No están en Personal',n('sinP'),'var(--gris)'],['sinF','Sin cargo según función',n('sinF'),'var(--gris)']].filter(x=>x[2]||['','reg','dif','con','ok'].includes(x[0]));
   $('#kpis').innerHTML=k.map(([id,l,v,c])=>`<div class="kpi ${filtroSit===id?'act':''}" data-s="${id}"><div class="l">${l}</div><div class="v" style="color:${c}">${v}</div>${id&&base.length?`<div class="muted">${(v/base.length*100).toFixed(1).replace('.',',')} %</div>`:''}</div>`).join('');
   document.querySelectorAll('.kpi').forEach(x=>x.onclick=()=>{filtroSit=x.dataset.s;pintar();});
   const L=filtradas(false);
-  $('#titulo').textContent=filtroSit?SIT[filtroSit][0]:'Todos los trabajadores';
+  $('#titulo').textContent=filtroSit==='reg'?'Por regularizar (cargo distinto y contratados)':filtroSit?SIT[filtroSit][0]:'Todos los trabajadores';
   $('#conteo').textContent=`${L.length} trabajador(es) en la lista. Pulsa un recuadro de arriba para cambiar de grupo.`;
-  $('#tb').innerHTML=L.map(f=>`<tr><td>${esc(f.c)}</td><td><strong>${esc(f.nombre)}</strong>${f.est!=='Activo'?`<div class="muted">${esc(f.est)}</div>`:''}</td><td>${esc(f.sede)}</td><td>${esc(f.ger)}${f.coord?`<div class="muted">${esc(f.coord)}</div>`:''}</td><td>${esc(f.nomina)}</td><td>${esc(f.cf)||'—'}</td><td>${esc(f.cn)||'—'}</td><td><span class="pill ${SIT[f.s][1]}">${SIT[f.s][0]}</span></td></tr>`).join('')||'<tr><td colspan="8" class="muted">No hay trabajadores con estos filtros.</td></tr>';
+  $('#tb').innerHTML=L.map(f=>`<tr><td>${esc(f.c)}</td><td><strong>${esc(f.nombre)}</strong>${f.est!=='Activo'?`<div class="muted">${esc(f.est)}</div>`:''}</td><td>${esc(f.sede)}</td><td>${esc(f.ger)}${f.coord?`<div class="muted">${esc(f.coord)}</div>`:''}</td><td>${esc(f.nomina)}</td><td>${esc(f.cf)||'—'}</td><td>${esc(f.cn)||'—'}</td><td>${esc(f.ing)}</td><td>${antTxt(f.meses)}</td><td><span class="pill ${SIT[f.s][1]}">${SIT[f.s][0]}</span></td></tr>`).join('')||'<tr><td colspan="10" class="muted">No hay trabajadores con estos filtros.</td></tr>';
 }
-['#q','#f-sede','#f-ger','#f-nom'].forEach(s=>$(s).addEventListener(s==='#q'?'input':'change',pintar));
+['#q','#f-sede','#f-ger','#f-nom','#f-ant'].forEach(s=>$(s).addEventListener(s==='#q'?'input':'change',pintar));
 $('#xls').onclick=()=>{
   if(typeof XLSX==='undefined'){alert('No se pudo cargar la librería de Excel.');return;}
   const L=filtradas(false);
-  const rows=[['CÉDULA','NOMBRES Y APELLIDOS','SEDE','GERENCIA','COORDINACIÓN','TIPO DE NÓMINA','CARGO SEGÚN FUNCIÓN','CARGO DE NÓMINA (BS)','SITUACIÓN']].concat(L.map(f=>[f.c,f.nombre,f.sede,f.ger,f.coord,f.nomina,f.cf,f.cn,SIT[f.s][0].toUpperCase()]));
-  const ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=[11,34,13,34,34,16,36,36,22].map(w=>({wch:w}));
+  const rows=[['CÉDULA','NOMBRES Y APELLIDOS','SEDE','GERENCIA','COORDINACIÓN','TIPO DE NÓMINA','CARGO SEGÚN FUNCIÓN','CARGO DE NÓMINA (BS)','FECHA DE INGRESO','ANTIGÜEDAD','SITUACIÓN']].concat(L.map(f=>[f.c,f.nombre,f.sede,f.ger,f.coord,f.nomina,f.cf,f.cn,f.ing,antTxt(f.meses),SIT[f.s][0].toUpperCase()]));
+  const ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=[11,34,13,34,34,16,36,36,13,20,22].map(w=>({wch:w}));
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Diferencia de cargos');
   const h=new Date();h.setMinutes(h.getMinutes()-h.getTimezoneOffset());
   XLSX.writeFile(wb,`Diferencia_de_cargos_${h.toISOString().slice(0,10)}.xlsx`);
