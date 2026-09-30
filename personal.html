@@ -270,7 +270,6 @@ tr:hover td{background:#fafafa;}
         <option value="Cambio de grupo rotativo">Cambio de grupo rotativo</option>
         <option value="Transferencia de personal">Transferencia de personal</option>
         <option value="Reincorporacion">Reincorporación</option>
-        <option value="Vacaciones">Vacaciones</option>
       </select>
     </div>
     <div class="form-group" style="margin-bottom:10px;">
@@ -372,12 +371,33 @@ function iniciarDatos(){
   window.db.ref('personal').on('value', function(snap){
     PERSONAL = snap.val() || {};
     setSync('sincronizado');
+    aplicarVacacionesProgramadas();
     actualizarKPIs();
     renderAvisoReincorporacion();
     renderTab();
   });
 }
 function setSync(t){ document.getElementById('sync-status').textContent = t; }
+
+// ── VACACIONES CARGADAS EN EL MÓDULO DE VACACIONES ─────────
+// Si una solicitud se cargó antes de empezar, el trabajador pasa a "Vacaciones" el día de inicio.
+var _vacAplicadas = {};
+function aplicarVacacionesProgramadas(){
+  if(ROLE!=='CHOCO') return;
+  var d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); var hoy=d.toISOString().slice(0,10);
+  var FV=firebase.firestore.FieldValue, fs=firebase.firestore();
+  Object.keys(PERSONAL).forEach(function(k){
+    var w=PERSONAL[k], vp=w.vacProgramada;
+    if(!vp||!vp.desde||vp.desde>hoy||_vacAplicadas[k]) return;
+    _vacAplicadas[k]=true;
+    var u={vacProgramada:FV.delete()};
+    var est=w.estado||'Activo';
+    if((!vp.hasta||vp.hasta>=hoy) && est==='Activo'){
+      u.estado='Vacaciones'; u.vacacionesFin=vp.hasta||FV.delete(); u.vacacionesPeriodo=vp.periodo||''; u.ultimoMovFecha=vp.desde; u.vacSolId=vp.solId;
+    }
+    fs.collection('personal').doc(k).set(u,{merge:true}).catch(function(e){ console.warn('Vacaciones programadas:',e.message); });
+  });
+}
 
 // ── KPIs ──────────────────────────────────────────────────
 function actualizarKPIs(){
@@ -676,7 +696,7 @@ function renderMovimientos(){
     +'<h2>Registrar movimiento por cédula</h2>'
     +'<div class="form-grid" style="margin-bottom:10px;">'
     +'<div class="form-group"><label>Cédula del trabajador</label><input type="text" id="qm-cedula" placeholder="Ej: 12345678"></div>'
-    +'<div class="form-group"><label>Tipo de movimiento</label><select id="qm-tipo"><option value="Egreso">Egreso</option><option value="Suspension">Suspensión</option><option value="Reincorporacion">Reincorporación</option><option value="Cambio de cargo">Cambio de cargo</option><option value="Cambio de unidad de adscripcion">Cambio de unidad de adscripción</option><option value="Culminacion de contrato">Culminación de contrato</option><option value="Transferencia de personal">Transferencia de personal</option><option value="Vacaciones">Vacaciones</option></select></div>'
+    +'<div class="form-group"><label>Tipo de movimiento</label><select id="qm-tipo"><option value="Egreso">Egreso</option><option value="Suspension">Suspensión</option><option value="Reincorporacion">Reincorporación</option><option value="Cambio de cargo">Cambio de cargo</option><option value="Cambio de unidad de adscripcion">Cambio de unidad de adscripción</option><option value="Culminacion de contrato">Culminación de contrato</option><option value="Transferencia de personal">Transferencia de personal</option></select><span class="muted">Las vacaciones se cargan en el módulo Vacaciones y Reposos y aparecen aquí solas.</span></div>'
     +'<div class="form-group"><label>Fecha</label><input type="date" id="qm-fecha" value="'+today+'"></div>'
     +'<div class="form-group"><label>Nuevo cargo / unidad (si aplica)</label><input type="text" id="qm-nuevo" placeholder="Nuevo valor"></div>'
     +'</div>'
@@ -816,7 +836,7 @@ function renderMovimientos(){
         var rows='';
         if(!f.length) rows='<tr><td colspan="'+colspan+'" class="muted" style="text-align:center;padding:20px;">Sin movimientos.</td></tr>';
         f.forEach(function(m){
-          var pc=m.tipo==='Ingreso'?'p-ingreso':m.tipo==='Egreso'?'p-egreso':m.tipo==='Suspension'?'p-suspendido':m.tipo==='Reincorporacion'?'p-activo':'p-contrato';
+          var pc=m.tipo==='Ingreso'?'p-ingreso':m.tipo==='Egreso'?'p-egreso':m.tipo==='Suspension'?'p-suspendido':m.tipo==='Reincorporacion'?'p-activo':m.tipo==='Vacaciones'?'p-vacaciones':m.tipo==='Reposo'?'p-hp':'p-contrato';
           var estAprob='';
           if(m.estadoAprobacion){
             var ep=m.estadoAprobacion==='Pendiente'?'p-pendiente':m.estadoAprobacion==='Aprobado'?'p-aprobado':'p-rechazado';
@@ -990,6 +1010,11 @@ function renderFicha(){
       +'<div style="font-size:12px;color:#6B2FA0;">'+(w.ultimoMovFecha?'<b>Fecha inicio:</b> '+ff(w.ultimoMovFecha):'')+(w.vacacionesFin?'<br><b>Fecha fin:</b> '+ff(w.vacacionesFin):'')+(w.vacacionesPeriodo?'<br><b>Período:</b> '+w.vacacionesPeriodo:'')+'</div>'
       +'</div>';
   }
+  if(w.vacProgramada&&w.vacProgramada.desde){
+    html+='<div style="background:#F3E8FF;border:1px dashed #9B59B6;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#6B2FA0;">'
+      +'<b>🗓 Vacaciones programadas</b> del '+ff(w.vacProgramada.desde)+(w.vacProgramada.hasta?' al '+ff(w.vacProgramada.hasta):'')+(w.vacProgramada.periodo?' · Período '+w.vacProgramada.periodo:'')
+      +'<div class="muted" style="color:#6B2FA0;">Cargadas en Vacaciones y Reposos. El estado cambia solo a "Vacaciones" el día de inicio.</div></div>';
+  }
   if(est==='Suspendido'){
     html+='<div style="background:var(--ambarbg);border:1px solid var(--ambar);border-radius:8px;padding:12px;margin-bottom:14px;">'
       +'<div style="font-weight:bold;color:var(--ambar);margin-bottom:6px;">⚠ Trabajador suspendido</div>'
@@ -1092,7 +1117,7 @@ function cargarHist(ced){
     if(!movs.length){el.innerHTML='<div class="muted">Sin movimientos.</div>';return;}
     var html='';
     movs.forEach(function(m){
-      var pc=m.tipo==='Ingreso'?'p-ingreso':m.tipo==='Egreso'?'p-egreso':m.tipo==='Suspension'?'p-suspendido':m.tipo==='Reincorporacion'?'p-activo':'p-contrato';
+      var pc=m.tipo==='Ingreso'?'p-ingreso':m.tipo==='Egreso'?'p-egreso':m.tipo==='Suspension'?'p-suspendido':m.tipo==='Reincorporacion'?'p-activo':m.tipo==='Vacaciones'?'p-vacaciones':m.tipo==='Reposo'?'p-hp':'p-contrato';
       var acc='';
       if(ROLE==='CHOCO'){
         acc='<div style="margin-top:4px;">'

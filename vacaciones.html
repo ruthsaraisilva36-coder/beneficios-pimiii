@@ -1068,6 +1068,60 @@ function saveVacacionesData() {
   }
 }
 
+
+// ══════════════ ENLACE CON PERSONAL ══════════════
+// Cada solicitud o reposo guardado aquí se refleja en Personal: queda como movimiento en el historial del trabajador
+// y, en el caso de vacaciones, cambia su estado a "Vacaciones" el día que empiezan.
+const _NOMBRES_GH = { 'ruthsaraisilvamogollon@gmail.com': 'Ruth Saraís M.', 'mariateresasaggiogarcia34@gmail.com': 'María Teresa G.', 'computadoramaryoris12@gmail.com': 'Maryoris Saraí C.' };
+function _isoFecha(f) { const d = parseFechaFlexible(f); if (!d) return ''; const m = String(d.getMonth() + 1).padStart(2, '0'), dd = String(d.getDate()).padStart(2, '0'); return d.getFullYear() + '-' + m + '-' + dd; }
+function _hoyIso() { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); }
+function _fmt(iso) { if (!iso) return ''; const p = iso.split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
+async function _enlazarPersonal(tipo, x, borrado) {
+  const ced = String(x.cedula || '').replace(/\D/g, '');
+  if (!ced) return;
+  const FV = firebase.firestore.FieldValue;
+  const esVac = tipo === 'sol';
+  const movRef = db.collection('personal_movimientos').doc((esVac ? 'vac_' : 'rep_') + x.id);
+  const perRef = db.collection('personal').doc(ced);
+  const pSnap = await perRef.get();
+  const P = pSnap.exists ? pSnap.data() : null;
+  if (borrado) {
+    await movRef.delete();
+    if (esVac && P) {
+      const u = {};
+      if (P.vacSolId === x.id && P.estado === 'Vacaciones') { u.estado = 'Activo'; u.vacacionesFin = FV.delete(); u.vacacionesPeriodo = FV.delete(); u.vacSolId = FV.delete(); }
+      if (P.vacProgramada && P.vacProgramada.solId === x.id) u.vacProgramada = FV.delete();
+      if (Object.keys(u).length) await perRef.set(u, { merge: true });
+    }
+    return;
+  }
+  if (!P) return; // la cédula no está en Personal: no se enlaza
+  const desde = _isoFecha(x.desde), hasta = _isoFecha(x.hasta), hoy = _hoyIso();
+  const u = firebase.auth().currentUser;
+  const quien = u ? (_NOMBRES_GH[(u.email || '').toLowerCase()] || u.email) : 'Sistema';
+  const detalle = esVac
+    ? 'Vacaciones' + (desde ? ' del ' + _fmt(desde) : '') + (hasta ? ' al ' + _fmt(hasta) : '') + (x.dias ? ' (' + x.dias + ' días hábiles)' : '') + (x.periodo ? ' | Período: ' + x.periodo : '') + (x.reintegro ? ' | Reintegro: ' + x.reintegro : '') + ' | Solicitud #' + x.id + ' — cargada en Vacaciones y Reposos'
+    : 'Reposo' + (desde ? ' del ' + _fmt(desde) : '') + (hasta ? ' al ' + _fmt(hasta) : '') + (x.dias ? ' (' + x.dias + ' días)' : '') + ' | Reposo #' + x.id + ' — cargado en Vacaciones y Reposos';
+  const prev = await movRef.get();
+  const mov = { cedula: ced, nombre: x.nombre || ((P.nombres || '') + ' ' + (P.apellidos || '')), tipo: esVac ? 'Vacaciones' : 'Reposo', fecha: desde || _isoFecha(x.fecha) || hoy,
+    detalle, origen: 'Vacaciones y Reposos', registradoPor: prev.exists ? (prev.data().registradoPor || quien) : quien, timestamp: prev.exists ? (prev.data().timestamp || Date.now()) : Date.now() };
+  if (prev.exists) { mov.editadoPor = quien; mov.editadoTimestamp = Date.now(); }
+  await movRef.set(mov);
+  if (!esVac) return;
+  const pu = {};
+  const puedeCambiar = !P.estado || P.estado === 'Activo' || (P.estado === 'Vacaciones' && (!P.vacSolId || P.vacSolId === x.id));
+  if (desde && desde <= hoy && (!hasta || hasta >= hoy)) {
+    if (puedeCambiar) Object.assign(pu, { estado: 'Vacaciones', vacacionesFin: hasta || FV.delete(), vacacionesPeriodo: x.periodo || '', ultimoMovFecha: desde, vacSolId: x.id });
+    if (P.vacProgramada && P.vacProgramada.solId === x.id) pu.vacProgramada = FV.delete();
+  } else if (desde && desde > hoy) {
+    pu.vacProgramada = { solId: x.id, desde, hasta, periodo: x.periodo || '' };
+    if (P.vacSolId === x.id && P.estado === 'Vacaciones') Object.assign(pu, { estado: 'Activo', vacacionesFin: FV.delete(), vacSolId: FV.delete() });
+  } else if (P.vacProgramada && P.vacProgramada.solId === x.id) {
+    pu.vacProgramada = FV.delete();
+  }
+  if (Object.keys(pu).length) await perRef.set(pu, { merge: true });
+}
+
 // ══════════════ FIREBASE SYNC ══════════════
 // Control de sincronización: qué hay en la nube y cómo estaba la última vez
 const _nube = { sol: new Map(), rep: new Map() };
@@ -1079,18 +1133,22 @@ function saveToFirebase() {
   return _guardando;
 }
 async function _sincronizar() {
+  const _cambios = [];
   for (const [tipo, lista, col] of [['sol', solicitudes, 'vac_solicitudes'], ['rep', reposos, 'vac_reposos']]) {
     const actuales = new Map(lista.map(x => [String(x.id), JSON.stringify(x)]));
     let batch = db.batch(), n = 0;
     const flush = async () => { if (n) { await batch.commit(); batch = db.batch(); n = 0; } };
     for (const [id, json] of actuales) {
-      if (_nube[tipo].get(id) !== json) { batch.set(db.collection(col).doc(id), JSON.parse(json)); n++; if (n >= 400) await flush(); }
+      if (_nube[tipo].get(id) !== json) { batch.set(db.collection(col).doc(id), JSON.parse(json)); n++; _cambios.push([tipo, JSON.parse(json), false]); if (n >= 400) await flush(); }
     }
     for (const id of [..._nube[tipo].keys()]) {
-      if (!actuales.has(id)) { batch.delete(db.collection(col).doc(id)); n++; if (n >= 400) await flush(); }
+      if (!actuales.has(id)) { batch.delete(db.collection(col).doc(id)); n++; try { _cambios.push([tipo, JSON.parse(_nube[tipo].get(id)), true]); } catch (e) {} if (n >= 400) await flush(); }
     }
     await flush();
     _nube[tipo] = actuales;
+  }
+  for (const [tipo, x, borrado] of _cambios) {
+    try { await _enlazarPersonal(tipo, x, borrado); } catch (e) { console.warn('Enlace con Personal:', e); avisoNube('La solicitud se guardó, pero no se pudo reflejar en Personal: ' + e.message); }
   }
   const e = document.getElementById('aviso-nube'); if (e) e.remove();
 }
