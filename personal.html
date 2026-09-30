@@ -208,12 +208,50 @@ tr:hover td{background:#fafafa;}
       <button class="active" data-tab="directorio">Directorio</button>
       <button data-tab="ingreso" id="tab-ingreso">Nuevo ingreso</button>
       <button data-tab="movimientos">Movimientos</button>
+      <button data-tab="comisiones">Comisiones de servicio</button>
       <button data-tab="ficha" id="tab-ficha" style="display:none;">Ficha trabajador</button>
     </div>
     <div id="view-directorio"></div>
     <div id="view-ingreso" style="display:none;"></div>
     <div id="view-movimientos" style="display:none;"></div>
+    <div id="view-comisiones" style="display:none;"></div>
     <div id="view-ficha" style="display:none;"></div>
+  </div>
+</div>
+
+<!-- MODAL COMISIÓN DE SERVICIO -->
+<div id="modal-com" class="modal-overlay">
+  <div class="modal" style="width:620px;">
+    <h3 id="com-titulo">Registrar comisión de servicio</h3>
+    <div class="form-grid">
+      <div class="form-group"><label>Tipo</label>
+        <select id="com-tipo"><option value="Saliente">Saliente (trabajador del PIM III que va a otro ente)</option><option value="Entrante">Entrante (viene de otro ente al PIM III)</option></select></div>
+      <div class="form-group"><label>Cédula</label><input id="com-ced" inputmode="numeric" placeholder="Sin puntos"></div>
+    </div>
+    <div class="muted" id="com-hallado" style="margin:6px 0 2px;min-height:16px;"></div>
+    <div class="form-grid" style="margin-top:6px;">
+      <div class="form-group"><label>Nombres y apellidos</label><input id="com-nombre"></div>
+      <div class="form-group"><label>Cargo de origen</label><input id="com-cargo-origen"></div>
+    </div>
+    <div class="form-grid" style="margin-top:10px;">
+      <div class="form-group"><label id="com-ente-lbl">Ente o unidad de destino</label><input id="com-ente"></div>
+      <div class="form-group"><label>Cargo o función durante la comisión</label><input id="com-cargo-com"></div>
+    </div>
+    <div class="form-grid-3" style="margin-top:10px;">
+      <div class="form-group"><label>Fecha de inicio</label><input type="date" id="com-desde"></div>
+      <div class="form-group"><label>Fecha de fin</label><input type="date" id="com-hasta"></div>
+      <div class="form-group"><label>&nbsp;</label><label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--texto);"><input type="checkbox" id="com-sinfin"> Hasta nuevo aviso</label></div>
+    </div>
+    <div class="form-grid" style="margin-top:10px;">
+      <div class="form-group"><label>N° de memo u oficio</label><input id="com-memo"></div>
+      <div class="form-group"><label>Estado</label><select id="com-estado"><option>Vigente</option><option>Prorrogada</option><option>Finalizada</option></select></div>
+    </div>
+    <div class="form-group" style="margin-top:10px;"><label>Observación</label><textarea id="com-obs"></textarea></div>
+    <div class="loginerr" id="com-err"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="com-cancelar">Cancelar</button>
+      <button class="btn btn-prim" id="com-guardar">Guardar</button>
+    </div>
   </div>
 </div>
 
@@ -330,6 +368,7 @@ document.getElementById('btn-salir').addEventListener('click', function(){
 // ── FIREBASE ──────────────────────────────────────────────
 function iniciarDatos(){
   setSync('cargando...');
+  iniciarComisiones();
   window.db.ref('personal').on('value', function(snap){
     PERSONAL = snap.val() || {};
     setSync('sincronizado');
@@ -414,7 +453,7 @@ document.querySelectorAll('.tabs button[data-tab]').forEach(function(btn){
 
 function tab(t){
   TAB = t;
-  ['directorio','ingreso','movimientos','ficha'].forEach(function(x){
+  ['directorio','ingreso','movimientos','comisiones','ficha'].forEach(function(x){
     document.getElementById('view-'+x).style.display = (x===t)?'block':'none';
   });
   document.querySelectorAll('.tabs button[data-tab]').forEach(function(b){
@@ -429,6 +468,7 @@ function renderTab(){
   if(TAB==='ingreso') renderIngreso();
   if(TAB==='movimientos') renderMovimientos();
   if(TAB==='ficha') renderFicha();
+  if(TAB==='comisiones') renderComisiones();
 }
 
 // ── DIRECTORIO ────────────────────────────────────────────
@@ -966,6 +1006,7 @@ function renderFicha(){
   html+='<div class="block-title" style="margin-top:12px;">Centro de votación</div>';
   [['Centro',w.cvNombre],['Estado CV',w.cvEstado],['Municipio CV',w.cvMunicipio]].forEach(function(r){html+=fr(r[0],r[1]);});
   html+='</div></div>';
+  html+=fichaComisiones(w.cedula||fichaActual);
   html+='<div style="margin-top:16px;"><div class="block-title">Historial de movimientos</div><div id="hist-mov"><div class="muted">Cargando...</div></div></div>';
   html+='</div>';
 
@@ -1276,6 +1317,179 @@ function exportarMovimientos(){
 // ── UTILIDADES ────────────────────────────────────────────
 function ff(f){if(!f)return'';try{var p=f.split('-');return p[2]+'/'+p[1]+'/'+p[0];}catch(e){return f;}}
 
+
+// ── COMISIONES DE SERVICIO (solo registro; el PIM III siempre paga) ──
+var COMISIONES = {}, comEditando = null, filtroComTipo = '', filtroComEstado = 'abiertas', busquedaCom = '';
+function comHoy(){ var d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,10); }
+function comEsc(t){ return String(t==null?'':t).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+function comDias(f){ if(!f) return null; return Math.round((new Date(f+'T00:00:00')-new Date(comHoy()+'T00:00:00'))/86400000); }
+function comAbierta(c){ return c.estado!=='Finalizada'; }
+function comVencida(c){ return comAbierta(c) && !c.sinFin && c.hasta && c.hasta < comHoy(); }
+function comPorVencer(c){ var d=comDias(c.hasta); return comAbierta(c) && !c.sinFin && d!==null && d>=0 && d<=15; }
+function iniciarComisiones(){
+  firebase.firestore().collection('personal_comisiones').onSnapshot(function(r){
+    COMISIONES = {}; r.docs.forEach(function(d){ COMISIONES[d.id] = d.data(); });
+    if(TAB==='comisiones') renderComisiones();
+    if(TAB==='ficha') { var b=document.getElementById('ficha-com'); if(b) b.outerHTML=fichaComisiones(fichaActual); }
+  }, function(e){ console.warn('Comisiones:', e.message); });
+}
+function comPill(c){
+  if(comVencida(c)) return '<span class="pill p-egreso">Vencida sin cerrar</span>';
+  if(comPorVencer(c)) return '<span class="pill p-suspendido">Vence en '+comDias(c.hasta)+' día(s)</span>';
+  var m={Vigente:'p-activo',Prorrogada:'p-ingreso',Finalizada:'p-contrato'};
+  return '<span class="pill '+(m[c.estado]||'p-contrato')+'">'+comEsc(c.estado)+'</span>';
+}
+function comLista(){ return Object.keys(COMISIONES).map(function(k){ var c=Object.assign({id:k},COMISIONES[k]); return c; }).sort(function(a,b){ return String(b.desde||'').localeCompare(String(a.desde||'')); }); }
+function renderComisiones(){
+  var v=document.getElementById('view-comisiones'); if(!v) return;
+  var todas=comLista();
+  var abiertas=todas.filter(comAbierta);
+  var nSal=abiertas.filter(function(c){return c.tipo==='Saliente';}).length, nEnt=abiertas.length-nSal;
+  var alertas=todas.filter(function(c){return comVencida(c)||comPorVencer(c);});
+  var q=busquedaCom.toUpperCase();
+  var lista=todas.filter(function(c){
+    if(filtroComTipo && c.tipo!==filtroComTipo) return false;
+    if(filtroComEstado==='abiertas' && !comAbierta(c)) return false;
+    if(filtroComEstado==='Finalizada' && c.estado!=='Finalizada') return false;
+    if(q && (String(c.cedula)+' '+c.nombre+' '+c.ente+' '+(c.memo||'')).toUpperCase().indexOf(q)<0) return false;
+    return true;
+  });
+  var html='';
+  if(alertas.length){
+    html+='<div class="card" style="border-left:4px solid var(--ambar);background:var(--ambarbg);"><div style="font-weight:bold;color:var(--ambar);margin-bottom:6px;">⚠ Comisiones que requieren atención ('+alertas.length+')</div><div class="muted" style="margin-bottom:6px;">Vencen en los próximos 15 días o ya pasaron su fecha de fin y siguen abiertas. Prorróguelas o márquelas como finalizadas.</div>';
+    alertas.forEach(function(c){ html+='<div style="font-size:12px;padding:3px 0;">'+comPill(c)+' <strong>'+comEsc(c.nombre)+'</strong> (C.I. '+comEsc(c.cedula)+') · '+comEsc(c.tipo)+' · '+comEsc(c.ente)+' · fin '+ff(c.hasta)+'</div>'; });
+    html+='</div>';
+  }
+  html+='<div class="kpis"><div class="kpi"><div class="l">Comisiones abiertas</div><div class="v" style="color:var(--azul)">'+abiertas.length+'</div></div>'
+    +'<div class="kpi"><div class="l">Salientes</div><div class="v">'+nSal+'</div></div>'
+    +'<div class="kpi"><div class="l">Entrantes</div><div class="v">'+nEnt+'</div></div>'
+    +'<div class="kpi"><div class="l">Por vencer o vencidas</div><div class="v" style="color:var(--ambar)">'+alertas.length+'</div></div></div>';
+  html+='<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;"><h2 style="margin:0">Comisiones de servicio</h2><div style="display:flex;gap:6px;">'
+    +(ROLE==='CHOCO'?'<button class="btn btn-prim" id="btn-com-nueva">+ Registrar comisión</button>':'')
+    +'<button class="btn btn-outline" id="btn-com-xls">Exportar Excel</button></div></div>'
+    +'<div class="searchbar"><input id="com-buscar" placeholder="Buscar por cédula, nombre, ente o memo" value="'+comEsc(busquedaCom)+'">'
+    +'<select id="com-f-tipo"><option value="">Entrantes y salientes</option><option'+(filtroComTipo==='Saliente'?' selected':'')+'>Saliente</option><option'+(filtroComTipo==='Entrante'?' selected':'')+'>Entrante</option></select>'
+    +'<select id="com-f-est"><option value="abiertas"'+(filtroComEstado==='abiertas'?' selected':'')+'>Abiertas (vigentes y prorrogadas)</option><option value="Finalizada"'+(filtroComEstado==='Finalizada'?' selected':'')+'>Finalizadas</option><option value="todas"'+(filtroComEstado==='todas'?' selected':'')+'>Todas</option></select></div>';
+  if(!lista.length) html+='<p class="muted">No hay comisiones con estos filtros.</p>';
+  else{
+    html+='<div class="tablewrap"><table><thead><tr><th>Tipo</th><th>Cédula</th><th>Trabajador</th><th>Ente o unidad</th><th>Cargo en la comisión</th><th>Desde</th><th>Hasta</th><th>Memo</th><th>Estado</th>'+(ROLE==='CHOCO'?'<th>Acciones</th>':'')+'</tr></thead><tbody>';
+    lista.forEach(function(c){
+      html+='<tr><td>'+comEsc(c.tipo)+'</td><td>'+comEsc(c.cedula)+'</td><td><strong>'+comEsc(c.nombre)+'</strong>'+(c.cargoOrigen?'<div class="muted">'+comEsc(c.cargoOrigen)+'</div>':'')+'</td><td>'+comEsc(c.ente)+'</td><td>'+comEsc(c.cargoComision)+'</td><td>'+ff(c.desde)+'</td><td>'+(c.sinFin?'Hasta nuevo aviso':ff(c.hasta))+'</td><td>'+comEsc(c.memo)+'</td><td>'+comPill(c)+'</td>';
+      if(ROLE==='CHOCO'){
+        html+='<td style="white-space:nowrap"><button class="btn btn-outline com-ed" data-id="'+c.id+'" style="padding:3px 8px;font-size:11px;">Editar</button> ';
+        if(comAbierta(c)) html+='<button class="btn btn-ambar com-pr" data-id="'+c.id+'" style="padding:3px 8px;font-size:11px;">Prorrogar</button> <button class="btn btn-verde com-fin" data-id="'+c.id+'" style="padding:3px 8px;font-size:11px;">Finalizar</button> ';
+        html+='<button class="btn btn-rojo com-del" data-id="'+c.id+'" style="padding:3px 8px;font-size:11px;" title="Eliminar registro">✕</button></td>';
+      }
+      html+='</tr>';
+    });
+    html+='</tbody></table></div>';
+  }
+  html+='<p class="muted" style="margin-top:8px;">Es solo un registro: el salario lo sigue pagando el PIM III y el estado del trabajador en el Directorio no cambia.</p></div>';
+  v.innerHTML=html;
+  var bn=document.getElementById('btn-com-nueva'); if(bn) bn.onclick=function(){ abrirComision(null); };
+  document.getElementById('btn-com-xls').onclick=exportarComisiones;
+  var bb=document.getElementById('com-buscar'); bb.oninput=function(){ busquedaCom=this.value; var p=this.selectionStart; renderComisiones(); var n=document.getElementById('com-buscar'); n.focus(); n.setSelectionRange(p,p); };
+  document.getElementById('com-f-tipo').onchange=function(){ filtroComTipo=this.value; renderComisiones(); };
+  document.getElementById('com-f-est').onchange=function(){ filtroComEstado=this.value; renderComisiones(); };
+  v.querySelectorAll('.com-ed').forEach(function(b){ b.onclick=function(){ abrirComision(this.dataset.id); }; });
+  v.querySelectorAll('.com-pr').forEach(function(b){ b.onclick=function(){ prorrogarComision(this.dataset.id); }; });
+  v.querySelectorAll('.com-fin').forEach(function(b){ b.onclick=function(){ finalizarComision(this.dataset.id); }; });
+  v.querySelectorAll('.com-del').forEach(function(b){ b.onclick=function(){ eliminarComision(this.dataset.id); }; });
+}
+function comBuscarTrabajador(){
+  var c=document.getElementById('com-ced').value.replace(/\D/g,''); var h=document.getElementById('com-hallado');
+  var w=PERSONAL[c];
+  if(!w){ h.textContent = c ? 'No está en el Directorio: escribe el nombre y el cargo a mano.' : ''; return; }
+  h.textContent='✓ En el Directorio: '+(w.gerencia||'')+(w.coordinacion?' / '+w.coordinacion:'');
+  var n=document.getElementById('com-nombre'), co=document.getElementById('com-cargo-origen');
+  if(!n.value) n.value=(w.apellidos||'')+', '+(w.nombres||'');
+  if(!co.value) co.value=w.cargo||'';
+}
+function comTipoCambio(){ document.getElementById('com-ente-lbl').textContent = document.getElementById('com-tipo').value==='Entrante' ? 'Ente o unidad de origen' : 'Ente o unidad de destino'; }
+function abrirComision(id, cedPre){
+  comEditando=id||null; var c=id?COMISIONES[id]:{};
+  document.getElementById('com-titulo').textContent = id ? 'Editar comisión de servicio' : 'Registrar comisión de servicio';
+  document.getElementById('com-tipo').value=c.tipo||'Saliente';
+  document.getElementById('com-ced').value=c.cedula||cedPre||'';
+  document.getElementById('com-nombre').value=c.nombre||'';
+  document.getElementById('com-cargo-origen').value=c.cargoOrigen||'';
+  document.getElementById('com-ente').value=c.ente||'';
+  document.getElementById('com-cargo-com').value=c.cargoComision||'';
+  document.getElementById('com-desde').value=c.desde||'';
+  document.getElementById('com-hasta').value=c.hasta||'';
+  document.getElementById('com-sinfin').checked=!!c.sinFin;
+  document.getElementById('com-hasta').disabled=!!c.sinFin;
+  document.getElementById('com-memo').value=c.memo||'';
+  document.getElementById('com-estado').value=c.estado||'Vigente';
+  document.getElementById('com-obs').value=c.observacion||'';
+  document.getElementById('com-err').textContent='';
+  comTipoCambio(); comBuscarTrabajador();
+  document.getElementById('modal-com').style.display='flex';
+}
+function cerrarComision(){ document.getElementById('modal-com').style.display='none'; comEditando=null; }
+function guardarComision(){
+  var g=function(i){ return document.getElementById(i).value.trim(); };
+  var err=document.getElementById('com-err');
+  var d={ tipo:g('com-tipo'), cedula:g('com-ced').replace(/\D/g,''), nombre:g('com-nombre').toUpperCase(), cargoOrigen:g('com-cargo-origen').toUpperCase(),
+    ente:g('com-ente').toUpperCase(), cargoComision:g('com-cargo-com').toUpperCase(), desde:g('com-desde'),
+    sinFin:document.getElementById('com-sinfin').checked, hasta:document.getElementById('com-sinfin').checked?'':g('com-hasta'),
+    memo:g('com-memo').toUpperCase(), estado:g('com-estado'), observacion:g('com-obs') };
+  if(!d.cedula||!d.nombre||!d.ente||!d.desde){ err.textContent='Cédula, nombre, ente y fecha de inicio son obligatorios.'; return; }
+  if(!d.sinFin && !d.hasta){ err.textContent='Indica la fecha de fin o marca "Hasta nuevo aviso".'; return; }
+  if(d.hasta && d.hasta < d.desde){ err.textContent='La fecha de fin no puede ser anterior a la de inicio.'; return; }
+  var dup=Object.keys(COMISIONES).some(function(k){ var c=COMISIONES[k]; return k!==comEditando && c.cedula===d.cedula && comAbierta(c) && d.estado!=='Finalizada'; });
+  if(dup && !confirm('Este trabajador ya tiene una comisión abierta. ¿Registrar otra de todas formas?')) return;
+  var col=firebase.firestore().collection('personal_comisiones'), btn=document.getElementById('com-guardar'); btn.disabled=true;
+  var p;
+  if(comEditando){ d.modificadoPor=USUARIO_NOMBRE; d.modificado=Date.now(); p=col.doc(comEditando).set(d,{merge:true}); }
+  else { d.registradoPor=USUARIO_NOMBRE; d.timestamp=Date.now(); d.historial=[]; p=col.add(d); }
+  p.then(function(){ btn.disabled=false; cerrarComision(); }).catch(function(e){ btn.disabled=false; err.textContent='No se pudo guardar: '+e.message; });
+}
+function prorrogarComision(id){
+  var c=COMISIONES[id]; if(!c) return;
+  var nueva=prompt('Prórroga de '+c.nombre+'.\nNueva fecha de fin (AAAA-MM-DD). Déjala vacía si es hasta nuevo aviso:', c.hasta||'');
+  if(nueva===null) return; nueva=nueva.trim();
+  if(nueva && !/^\d{4}-\d{2}-\d{2}$/.test(nueva)){ alert('Formato inválido. Usa AAAA-MM-DD.'); return; }
+  if(nueva && c.desde && nueva < c.desde){ alert('La nueva fecha no puede ser anterior al inicio.'); return; }
+  var memo=prompt('N° de memo u oficio de la prórroga (opcional):','');
+  if(memo===null) return;
+  var h=(c.historial||[]).concat([{accion:'Prórroga', finAnterior:c.sinFin?'Hasta nuevo aviso':(c.hasta||''), finNuevo:nueva||'Hasta nuevo aviso', memo:memo.trim().toUpperCase(), fecha:comHoy(), por:USUARIO_NOMBRE}]);
+  firebase.firestore().collection('personal_comisiones').doc(id).set({estado:'Prorrogada', hasta:nueva, sinFin:!nueva, historial:h, modificadoPor:USUARIO_NOMBRE, modificado:Date.now()},{merge:true}).catch(function(e){ alert('Error: '+e.message); });
+}
+function finalizarComision(id){
+  var c=COMISIONES[id]; if(!c) return;
+  var f=prompt('Fecha real de finalización de la comisión de '+c.nombre+' (AAAA-MM-DD):', (!c.sinFin && c.hasta && c.hasta<=comHoy()) ? c.hasta : comHoy());
+  if(f===null) return; f=f.trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(f)){ alert('Formato inválido. Usa AAAA-MM-DD.'); return; }
+  var h=(c.historial||[]).concat([{accion:'Finalización', finAnterior:c.sinFin?'Hasta nuevo aviso':(c.hasta||''), finNuevo:f, fecha:comHoy(), por:USUARIO_NOMBRE}]);
+  firebase.firestore().collection('personal_comisiones').doc(id).set({estado:'Finalizada', hasta:f, sinFin:false, historial:h, modificadoPor:USUARIO_NOMBRE, modificado:Date.now()},{merge:true}).catch(function(e){ alert('Error: '+e.message); });
+}
+function eliminarComision(id){
+  var c=COMISIONES[id]; if(!c) return;
+  if(!confirm('¿Eliminar el registro de la comisión de '+c.nombre+'? Úsalo solo si se cargó por error. Para cerrarla, usa "Finalizar".')) return;
+  firebase.firestore().collection('personal_comisiones').doc(id).delete().catch(function(e){ alert('Error: '+e.message); });
+}
+function fichaComisiones(ced){
+  var l=comLista().filter(function(c){ return String(c.cedula)===String(ced); });
+  var h='<div id="ficha-com" style="margin-top:16px;"><div class="block-title">Comisiones de servicio</div>';
+  if(!l.length) h+='<div class="muted">Sin comisiones registradas.</div>';
+  l.forEach(function(c){ h+='<div class="mov-item"><div class="mov-date">'+ff(c.desde)+'</div><div class="mov-content">'+comPill(c)+' <strong>'+comEsc(c.tipo)+'</strong> · '+comEsc(c.ente)+(c.cargoComision?' · '+comEsc(c.cargoComision):'')+'<div class="muted">Hasta: '+(c.sinFin?'nuevo aviso':ff(c.hasta))+(c.memo?' · Memo '+comEsc(c.memo):'')+'</div></div></div>'; });
+  if(ROLE==='CHOCO') h+='<button class="btn btn-outline" style="margin-top:6px;font-size:11px;" onclick="abrirComision(null,\''+comEsc(ced)+'\')">+ Registrar comisión</button>';
+  return h+'</div>';
+}
+function exportarComisiones(){
+  if(typeof XLSX==='undefined'){alert('Librería no disponible.');return;}
+  var rows=[['TIPO','CÉDULA','NOMBRES Y APELLIDOS','CARGO DE ORIGEN','ENTE O UNIDAD','CARGO EN LA COMISIÓN','DESDE','HASTA','N° MEMO','ESTADO','OBSERVACIÓN','REGISTRADO POR']];
+  comLista().forEach(function(c){ rows.push([c.tipo,c.cedula,c.nombre,c.cargoOrigen||'',c.ente,c.cargoComision||'',ff(c.desde),c.sinFin?'HASTA NUEVO AVISO':ff(c.hasta),c.memo||'',c.estado,c.observacion||'',c.registradoPor||'']); });
+  var ws=XLSX.utils.aoa_to_sheet(rows); ws['!cols']=[8,11,32,28,32,28,11,18,14,11,30,16].map(function(w){return {wch:w};});
+  var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Comisiones');
+  XLSX.writeFile(wb,'Comisiones_de_servicio_'+comHoy()+'.xlsx');
+}
+document.getElementById('com-cancelar').onclick=cerrarComision;
+document.getElementById('com-guardar').onclick=guardarComision;
+document.getElementById('com-ced').onblur=comBuscarTrabajador;
+document.getElementById('com-tipo').onchange=comTipoCambio;
+document.getElementById('com-sinfin').onchange=function(){ var h=document.getElementById('com-hasta'); h.disabled=this.checked; if(this.checked) h.value=''; };
 </script>
 </body>
 </html>

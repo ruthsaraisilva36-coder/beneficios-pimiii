@@ -78,6 +78,11 @@ td{padding:5px 6px;border-bottom:1px solid #EDF0F3}
         <p>Directorio, fichas, movimientos, ingresos, egresos y aprobaciones de cargo y adscripción.</p>
         <span class="estado u">En la base unificada</span>
       </a>
+      <a class="mod" href="cargos.html" style="--c:var(--ambar)">
+        <h3>Diferencia de cargos</h3>
+        <p>Cargo según función frente al cargo de la nómina en bolívares, para la regularización. Con descarga en Excel.</p>
+        <span class="estado u">Reporte</span>
+      </a>
     </div>
 
     <section class="panel">
@@ -119,17 +124,18 @@ async function buscar(){
   if(!c){out.innerHTML='<p class="vacio">Escribe una cédula.</p>';return;}
   out.innerHTML='<p class="vacio">Buscando...</p>';
   try{
-    const [p,b,v,s]=await Promise.all([getDoc(doc(db,'personal',c)),getDoc(doc(db,'trabajadores',c)),
-      getDocs(query(collection(db,'vac_vencidas'),where('c','==',c))),getDocs(query(collection(db,'vac_solicitudes'),where('cedula','==',c)))]);
+    const [p,b,v,s,cm]=await Promise.all([getDoc(doc(db,'personal',c)),getDoc(doc(db,'trabajadores',c)),
+      getDocs(query(collection(db,'vac_vencidas'),where('c','==',c))),getDocs(query(collection(db,'vac_solicitudes'),where('cedula','==',c))),getDocs(query(collection(db,'personal_comisiones'),where('cedula','==',c)))]);
+    const CM=cm.docs.map(x=>x.data()).filter(x=>x.estado!=='Finalizada');
     const P=p.exists()?p.data():null,B=b.exists()?b.data():null,V=v.docs.map(x=>x.data()),S=s.docs.map(x=>x.data()).sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
-    if(!P&&!B&&!V.length&&!S.length){out.innerHTML='<p class="vacio">No hay ningún registro con esa cédula en los tres sistemas.</p>';return;}
+    if(!P&&!B&&!V.length&&!S.length&&!CM.length){out.innerHTML='<p class="vacio">No hay ningún registro con esa cédula en los tres sistemas.</p>';return;}
     const nombre=P?`${P.apellidos||''}, ${P.nombres||''}`:(V[0]?.n||B?.nom||'');
     const cargoN=[...new Set(V.map(r=>r.g).filter(Boolean))].join(' / ');
     const cargoF=P?.cargo||'';
     const reg=cargoN&&cargoF&&!cargoN.split(' / ').some(x=>norm(x)===norm(cargoF));
     out.innerHTML=`<h3 style="margin:16px 0 0;font-size:17px">${esc(nombre)} <span style="color:var(--gris);font-weight:normal;font-size:14px">C.I. ${c}</span> ${reg?'<span class="pill">Cargo por regularizar</span>':''}</h3>
     <div class="exp">
-      <div class="caja" style="--c:var(--per)"><h4>Personal</h4>${P?d('Cargo según función',P.cargo)+d('Gerencia',P.gerencia)+d('Coordinación',P.coordinacion)+d('Ubicación',P.ubicacion)+d('Ingreso',fd(P.fechaIngreso))+d('Tipo de nómina',P.tipoNomina)+d('Estado',P.estado||'Activo')+'':'<p class="vacio">No está en Personal.</p>'}</div>
+      <div class="caja" style="--c:var(--per)"><h4>Personal</h4>${P?d('Cargo según función',P.cargo)+d('Gerencia',P.gerencia)+d('Coordinación',P.coordinacion)+d('Ubicación',P.ubicacion)+d('Ingreso',fd(P.fechaIngreso))+d('Tipo de nómina',P.tipoNomina)+d('Estado',P.estado||'Activo')+CM.map(x=>d('Comisión de servicio',x.tipo+' · '+x.ente+' · hasta '+(x.sinFin?'nuevo aviso':fd(x.hasta)))).join(''):'<p class="vacio">No está en Personal.</p>'}</div>
       <div class="caja" style="--c:var(--vac)"><h4>Vacaciones</h4>${V.length?d('Cargo de nómina (Bs)',cargoN)+d('Ingreso (nómina)',V[0].i)+d('Sede',V[0].u)+
         `<table><tr><th>Último período</th><th>Pendiente</th><th>Años vencidos</th></tr>${V.map(r=>`<tr><td>${esc(r.up)}</td><td>${esc(r.pp)}</td><td>${esc(r.tv)}</td></tr>`).join('')}</table>`:'<p class="vacio">No tiene filas de vacaciones vencidas.</p>'}
         ${S.length?`<table><tr><th>Solicitud</th><th>Período</th><th>Desde</th><th>Hasta</th><th>Estado</th></tr>${S.map(x=>`<tr><td>${fd(x.fecha)}</td><td>${esc(x.periodo)}</td><td>${fd(x.desde)}</td><td>${fd(x.hasta)}</td><td>${esc(x.estado)}</td></tr>`).join('')}</table>`:''}</div>

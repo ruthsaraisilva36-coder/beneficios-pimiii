@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diferencia de cargos — Gestión Humana PIM III</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--azul:#16467A;--tinta:#1E2A36;--gris:#5E6B78;--linea:#D6DDE4;--fondo:#F3F5F7;--rojo:#B3261E;--ambar:#8A5A00;--ambarbg:#FFF4DE;--verde:#2E7D32;--verdebg:#E8F3E9;--grisbg:#EEF1F4;--azulbg:#E6EEF7}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:var(--tinta);background:var(--fondo)}
+header{background:var(--azul);color:#fff;padding:14px 22px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+header h1{font-size:18px;margin:0} header a{color:#fff;text-decoration:none} header p{margin:2px 0 0;font-size:12px;opacity:.85}
+.usr{font-size:12.5px;display:flex;gap:10px;align-items:center}
+.usr button{background:none;border:1px solid rgba(255,255,255,.6);color:#fff;border-radius:4px;padding:5px 10px;cursor:pointer;font-size:12px}
+main{max-width:1250px;margin:0 auto;padding:20px}
+.panel{background:#fff;border:1px solid var(--linea);border-radius:6px;padding:18px;margin-bottom:16px}
+h2{font-size:16px;margin:0 0 12px;color:var(--azul)}
+label{display:block;font-size:12px;color:var(--gris);margin:10px 0 4px}
+input,select{padding:8px 10px;border:1px solid var(--linea);border-radius:4px;font-size:13px;font-family:inherit}
+.btn{padding:9px 16px;border:none;border-radius:4px;background:var(--azul);color:#fff;font-size:13px;font-weight:bold;cursor:pointer}
+.btn.sec{background:#fff;color:var(--azul);border:1px solid var(--azul)}
+.login{max-width:380px;margin:60px auto} .login input{width:100%}
+.err{color:var(--rojo);font-size:12.5px;min-height:18px;margin-top:8px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+.kpi{background:#fff;border:1px solid var(--linea);border-radius:6px;padding:12px 14px;cursor:pointer}
+.kpi.act{outline:2px solid var(--azul)}
+.kpi .l{font-size:12px;color:var(--gris)} .kpi .v{font-size:26px;font-weight:bold}
+.filtros{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.filtros input{flex:1;min-width:220px}
+.tw{max-height:560px;overflow:auto;border:1px solid var(--linea);border-radius:6px}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th{background:var(--azul);color:#fff;text-align:left;padding:7px 8px;position:sticky;top:0;font-size:12px}
+td{padding:6px 8px;border-bottom:1px solid #EDF0F3;vertical-align:top}
+tr:hover td{background:#FAFBFC}
+.pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:bold;white-space:nowrap}
+.p-ok{background:var(--verdebg);color:var(--verde)} .p-dif{background:var(--ambarbg);color:var(--ambar)}
+.p-con{background:var(--azulbg);color:var(--azul)} .p-sin{background:var(--grisbg);color:var(--gris)}
+.muted{color:var(--gris);font-size:12px}
+.oculto{display:none}
+</style>
+</head>
+<body>
+<header>
+  <div><h1><a href="sistema.html" title="Volver al menú">&larr; GH PIM III</a> | Diferencia de cargos</h1><p>Cargo según función (Personal) frente al cargo de la nómina en bolívares (Vacaciones)</p></div>
+  <div class="usr oculto" id="usr"><span id="quien"></span><button id="salir">Salir</button></div>
+</header>
+<main>
+  <section class="panel login" id="p-login">
+    <h2>Entrar al sistema</h2>
+    <label for="correo">Correo</label><input id="correo" type="email" autocomplete="username">
+    <label for="clave">Contraseña</label><input id="clave" type="password" autocomplete="current-password">
+    <div style="margin-top:14px"><button class="btn" id="entrar">Entrar</button></div>
+    <div class="err" id="err"></div>
+  </section>
+  <div id="p-app" class="oculto">
+    <div class="kpis" id="kpis"></div>
+    <section class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+        <h2 style="margin:0" id="titulo">Trabajadores</h2>
+        <button class="btn" id="xls">Exportar Excel</button>
+      </div>
+      <div class="filtros">
+        <input id="q" placeholder="Buscar por cédula, nombre o cargo">
+        <select id="f-sede"><option value="">Ambas sedes</option><option>Planta Chocó</option><option>Mina Isidora</option></select>
+        <select id="f-ger"><option value="">Todas las gerencias</option></select>
+        <select id="f-nom"><option value="">Todos los tipos de nómina</option></select>
+      </div>
+      <div class="muted" id="conteo" style="margin-bottom:8px"></div>
+      <div class="tw"><table><thead><tr><th>Cédula</th><th>Trabajador</th><th>Sede</th><th>Gerencia / Coordinación</th><th>Tipo de nómina</th><th>Cargo según función</th><th>Cargo de nómina (Bs)</th><th>Situación</th></tr></thead><tbody id="tb"></tbody></table></div>
+      <p class="muted" style="margin-top:8px">Solo lectura. Se consideran los trabajadores activos, de vacaciones o suspendidos de Personal; los egresados y los contratos culminados no se incluyen. Para corregir un cargo, hazlo en Personal (cargo según función) o en Vacaciones (cargo de nómina).</p>
+    </section>
+  </div>
+</main>
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+import { getFirestore, collection, getDocs } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+const app=initializeApp({apiKey:"AIzaSyBJiS_a9CVKXXvWPZ85e4iBmDpFijM7y6Q",authDomain:"beneficio-pimiii-hcm-utiles.firebaseapp.com",projectId:"beneficio-pimiii-hcm-utiles",storageBucket:"beneficio-pimiii-hcm-utiles.firebasestorage.app",messagingSenderId:"691905699172",appId:"1:691905699172:web:b68e8be7947135e7abae71"});
+const auth=getAuth(app), db=getFirestore(app);
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+const ced=s=>String(s||'').replace(/\D/g,'');
+const SIT={ok:['Coincide','p-ok'],dif:['Por regularizar','p-dif'],con:['Contratado en nómina','p-con'],sinN:['Sin cargo de nómina','p-sin'],sinF:['Sin cargo según función','p-sin']};
+let FILAS=[], filtroSit='dif';
+
+$('#entrar').onclick=()=>signInWithEmailAndPassword(auth,$('#correo').value.trim(),$('#clave').value).catch(()=>{$('#err').textContent='Correo o contraseña incorrectos.';});
+$('#clave').onkeydown=e=>{if(e.key==='Enter')$('#entrar').click();};
+$('#salir').onclick=()=>signOut(auth);
+let cargado=false;
+onAuthStateChanged(auth,u=>{
+  $('#p-login').classList.toggle('oculto',!!u);$('#p-app').classList.toggle('oculto',!u);$('#usr').classList.toggle('oculto',!u);
+  if(u){$('#quien').textContent=u.email; if(!cargado){cargado=true;cargar();}}
+});
+
+function sede(w){const u=norm(w.ubicacion);if(u.includes('ISIDORA'))return 'Mina Isidora';if(u.includes('CHOCO'))return 'Planta Chocó';return norm(w.gerencia).includes('ISIDORA')?'Mina Isidora':'Planta Chocó';}
+async function cargar(){
+  $('#conteo').textContent='Cargando datos...';
+  try{
+    const [p,v]=await Promise.all([getDocs(collection(db,'personal')),getDocs(collection(db,'vac_vencidas'))]);
+    const nom={};
+    v.docs.forEach(d=>{const x=d.data();const c=ced(x.c);if(!c)return;(nom[c]=nom[c]||new Set());if(x.g&&String(x.g).trim())nom[c].add(String(x.g).trim().toUpperCase());});
+    FILAS=[];
+    p.docs.forEach(d=>{
+      const w=d.data();const est=w.estado||'Activo';
+      if(est==='Egresado'||est==='Contrato culminado')return;
+      const c=ced(w.cedula||d.id);
+      const cf=String(w.cargo||'').trim().toUpperCase();
+      const cn=[...(nom[c]||[])];
+      let s;
+      if(!cf) s='sinF';
+      else if(!cn.length) s='sinN';
+      else if(cn.some(x=>norm(x)===norm(cf))) s='ok';
+      else if(cn.every(x=>norm(x)==='CONTRATADO')) s='con';
+      else s='dif';
+      FILAS.push({c,nombre:`${w.apellidos||''}, ${w.nombres||''}`.replace(/^, |, $/,''),sede:sede(w),ger:w.gerencia||'',coord:w.coordinacion||'',nomina:w.tipoNomina||'',cf,cn:cn.join(' / '),s,est});
+    });
+    FILAS.sort((a,b)=>a.nombre.localeCompare(b.nombre));
+    const gers=[...new Set(FILAS.map(f=>f.ger).filter(Boolean))].sort();
+    $('#f-ger').innerHTML='<option value="">Todas las gerencias</option>'+gers.map(g=>`<option>${esc(g)}</option>`).join('');
+    const noms=[...new Set(FILAS.map(f=>f.nomina).filter(Boolean))].sort();
+    $('#f-nom').innerHTML='<option value="">Todos los tipos de nómina</option>'+noms.map(g=>`<option>${esc(g)}</option>`).join('');
+    pintar();
+  }catch(e){$('#conteo').innerHTML=`<span class="err">No se pudieron leer los datos: ${esc(e.message)}</span>`;}
+}
+function filtradas(ignorarSit){
+  const q=norm($('#q').value),fs=$('#f-sede').value,fg=$('#f-ger').value,fn=$('#f-nom').value;
+  return FILAS.filter(f=>(ignorarSit||!filtroSit||f.s===filtroSit)&&(!fs||f.sede===fs)&&(!fg||f.ger===fg)&&(!fn||f.nomina===fn)&&(!q||norm(f.c+' '+f.nombre+' '+f.cf+' '+f.cn).includes(q)));
+}
+function pintar(){
+  const base=filtradas(true);
+  const n=k=>base.filter(f=>f.s===k).length;
+  const k=[['',`Total`,base.length,'var(--tinta)'],['dif','Por regularizar',n('dif'),'var(--ambar)'],['ok','Coinciden',n('ok'),'var(--verde)'],['con','Contratado en nómina',n('con'),'var(--azul)'],['sinN','Sin cargo de nómina',n('sinN'),'var(--gris)'],['sinF','Sin cargo según función',n('sinF'),'var(--gris)']];
+  $('#kpis').innerHTML=k.map(([id,l,v,c])=>`<div class="kpi ${filtroSit===id?'act':''}" data-s="${id}"><div class="l">${l}</div><div class="v" style="color:${c}">${v}</div>${id&&base.length?`<div class="muted">${(v/base.length*100).toFixed(1).replace('.',',')} %</div>`:''}</div>`).join('');
+  document.querySelectorAll('.kpi').forEach(x=>x.onclick=()=>{filtroSit=x.dataset.s;pintar();});
+  const L=filtradas(false);
+  $('#titulo').textContent=filtroSit?SIT[filtroSit][0]:'Todos los trabajadores';
+  $('#conteo').textContent=`${L.length} trabajador(es) en la lista. Pulsa un recuadro de arriba para cambiar de grupo.`;
+  $('#tb').innerHTML=L.map(f=>`<tr><td>${esc(f.c)}</td><td><strong>${esc(f.nombre)}</strong>${f.est!=='Activo'?`<div class="muted">${esc(f.est)}</div>`:''}</td><td>${esc(f.sede)}</td><td>${esc(f.ger)}${f.coord?`<div class="muted">${esc(f.coord)}</div>`:''}</td><td>${esc(f.nomina)}</td><td>${esc(f.cf)||'—'}</td><td>${esc(f.cn)||'—'}</td><td><span class="pill ${SIT[f.s][1]}">${SIT[f.s][0]}</span></td></tr>`).join('')||'<tr><td colspan="8" class="muted">No hay trabajadores con estos filtros.</td></tr>';
+}
+['#q','#f-sede','#f-ger','#f-nom'].forEach(s=>$(s).addEventListener(s==='#q'?'input':'change',pintar));
+$('#xls').onclick=()=>{
+  if(typeof XLSX==='undefined'){alert('No se pudo cargar la librería de Excel.');return;}
+  const L=filtradas(false);
+  const rows=[['CÉDULA','NOMBRES Y APELLIDOS','SEDE','GERENCIA','COORDINACIÓN','TIPO DE NÓMINA','CARGO SEGÚN FUNCIÓN','CARGO DE NÓMINA (BS)','SITUACIÓN']].concat(L.map(f=>[f.c,f.nombre,f.sede,f.ger,f.coord,f.nomina,f.cf,f.cn,SIT[f.s][0].toUpperCase()]));
+  const ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=[11,34,13,34,34,16,36,36,22].map(w=>({wch:w}));
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Diferencia de cargos');
+  const h=new Date();h.setMinutes(h.getMinutes()-h.getTimezoneOffset());
+  XLSX.writeFile(wb,`Diferencia_de_cargos_${h.toISOString().slice(0,10)}.xlsx`);
+};
+</script>
+</body>
+</html>
