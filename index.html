@@ -850,8 +850,9 @@ function modal(titulo,sub,cuerpo,onGuardar,extra){
 const g=(d,id)=>(d.querySelector('#'+id)?.value||'').trim();
 const txt=(id,lab,val,tipo='text')=>`<label>${lab}
   <input id="${id}" type="${tipo}" value="${esc(val??'')}"></label>`;
+// Si el valor guardado no está en la lista, se agrega para que no se borre al guardar
 const opt=(id,lab,vals,cur)=>`<label>${lab}<select id="${id}">
-  ${vals.map(v=>`<option ${v===cur?'selected':''}>${esc(v)}</option>`).join('')}</select></label>`;
+  ${(cur&&!vals.includes(cur)?[...vals,cur]:vals).map(v=>`<option ${v===cur?'selected':''}>${esc(v)}</option>`).join('')}</select></label>`;
 
 function editarTrabajador(ced){
   const t=DATA.find(x=>x.ced===ced); if(!t) return;
@@ -890,7 +891,7 @@ function editarFamiliar(ced,ix){
     `<label style="grid-column:1/-1">Nombres y apellidos<input id="f-nom" value="${esc(f.nom)}"></label>`+
     opt('f-sexo','Sexo',['','M','F'],f.sexo)+
     txt('f-fnac','Fecha de nacimiento',f.fnac,'date')+
-    opt('f-niv','Nivel educativo',['','MATERNAL','PREESCOLAR','PRIMARIA','BACHILLERATO','UNIVERSITARIO'],f.niv)+
+    opt('f-niv','Nivel educativo',['','NO ESTUDIA','MATERNAL','PREESCOLAR','PRIMARIA','BACHILLERATO','UNIVERSITARIO'],f.niv)+
     txt('f-fr','Talla de franela',T.fr)+
     txt('f-pa','Talla de pantalón',T.pa)+
     txt('f-ca','Talla de calzado',T.ca)+
@@ -953,7 +954,7 @@ function editarApoyoExterno(ix){
     opt('x-par','Relación',['OTRO','NIETO','SOBRINO','HERMANO','VECINO','COMUNIDAD'],f.par)+
     opt('x-sexo','Sexo',['','M','F'],f.sexo)+
     txt('x-fnac','Fecha de nacimiento',f.fnac,'date')+
-    opt('x-niv','Nivel educativo',['','MATERNAL','PREESCOLAR','PRIMARIA','BACHILLERATO','UNIVERSITARIO'],f.niv)+
+    opt('x-niv','Nivel educativo',['','NO ESTUDIA','MATERNAL','PREESCOLAR','PRIMARIA','BACHILLERATO','UNIVERSITARIO'],f.niv)+
     txt('x-fr','Talla de franela',T.fr)+
     txt('x-pa','Talla de pantalón',T.pa)+
     txt('x-ca','Talla de calzado',T.ca)+
