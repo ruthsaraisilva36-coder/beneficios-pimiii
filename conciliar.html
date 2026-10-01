@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conciliación Personal y Beneficios — Gestión Humana PIM III</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--azul:#16467A;--tinta:#1E2A36;--gris:#5E6B78;--linea:#D6DDE4;--fondo:#F3F5F7;--rojo:#B3261E;--ambar:#8A5A00;--ambarbg:#FFF4DE;--verde:#2E7D32;--verdebg:#E8F3E9;--grisbg:#EEF1F4;--azulbg:#E6EEF7}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:var(--tinta);background:var(--fondo)}
+header{background:var(--azul);color:#fff;padding:14px 22px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+header h1{font-size:18px;margin:0} header a{color:#fff;text-decoration:none} header p{margin:2px 0 0;font-size:12px;opacity:.85}
+.usr{font-size:12.5px;display:flex;gap:10px;align-items:center}
+.usr button{background:none;border:1px solid rgba(255,255,255,.6);color:#fff;border-radius:4px;padding:5px 10px;cursor:pointer;font-size:12px}
+main{max-width:1250px;margin:0 auto;padding:20px}
+.panel{background:#fff;border:1px solid var(--linea);border-radius:6px;padding:18px;margin-bottom:16px}
+h2{font-size:16px;margin:0 0 12px;color:var(--azul)}
+label{display:block;font-size:12px;color:var(--gris);margin:10px 0 4px}
+input,select{padding:8px 10px;border:1px solid var(--linea);border-radius:4px;font-size:13px;font-family:inherit}
+.btn{padding:9px 16px;border:none;border-radius:4px;background:var(--azul);color:#fff;font-size:13px;font-weight:bold;cursor:pointer}
+.btn.sec{background:#fff;color:var(--azul);border:1px solid var(--azul)}
+.login{max-width:380px;margin:60px auto} .login input{width:100%}
+.err{color:var(--rojo);font-size:12.5px;min-height:18px;margin-top:8px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+.kpi{background:#fff;border:1px solid var(--linea);border-radius:6px;padding:12px 14px;cursor:pointer}
+.kpi.act{outline:2px solid var(--azul)}
+.kpi .l{font-size:12px;color:var(--gris)} .kpi .v{font-size:26px;font-weight:bold}
+.filtros{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.filtros input{flex:1;min-width:220px}
+.tw{max-height:560px;overflow:auto;border:1px solid var(--linea);border-radius:6px}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th{background:var(--azul);color:#fff;text-align:left;padding:7px 8px;position:sticky;top:0;font-size:12px}
+td{padding:6px 8px;border-bottom:1px solid #EDF0F3;vertical-align:top}
+tr:hover td{background:#FAFBFC}
+.pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:bold;white-space:nowrap}
+.p-ok{background:var(--verdebg);color:var(--verde)} .p-dif{background:var(--ambarbg);color:var(--ambar)}
+.p-con{background:var(--azulbg);color:var(--azul)} .p-sin{background:var(--grisbg);color:var(--gris)}
+.muted{color:var(--gris);font-size:12px}
+.oculto{display:none}
+.p-fue{background:#FCEBEB;color:var(--rojo)}
+.acciones{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+td input[type=checkbox],th input[type=checkbox]{width:16px;height:16px;cursor:pointer}
+.aviso{background:var(--ambarbg);color:var(--ambar);border-radius:6px;padding:10px 12px;font-size:12.5px;margin-bottom:12px;line-height:1.5}
+</style>
+</head>
+<body>
+<header>
+  <div><h1><a href="sistema.html" title="Volver al menú">&larr; GH PIM III</a> | Conciliación Personal y Beneficios</h1><p>Trabajadores cuya situación en Beneficios no coincide con la de Personal</p></div>
+  <div class="usr oculto" id="usr"><span id="quien"></span><button id="salir">Salir</button></div>
+</header>
+<main>
+  <section class="panel login" id="p-login">
+    <h2>Entrar al sistema</h2>
+    <label for="correo">Correo</label><input id="correo" type="email" autocomplete="username">
+    <label for="clave">Contraseña</label><input id="clave" type="password" autocomplete="current-password">
+    <div style="margin-top:14px"><button class="btn" id="entrar">Entrar</button></div>
+    <div class="err" id="err"></div>
+  </section>
+  <div id="p-app" class="oculto">
+    <div class="kpis" id="kpis"></div>
+    <section class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+        <h2 style="margin:0" id="titulo">—</h2>
+        <div class="acciones">
+          <button class="btn sec" id="xls">Exportar Excel</button>
+          <button class="btn" id="aplicar" disabled>Aplicar en Beneficios</button>
+        </div>
+      </div>
+      <div class="aviso" id="aviso"></div>
+      <div class="filtros"><input id="q" placeholder="Buscar por cédula o nombre"></div>
+      <div class="muted" id="conteo" style="margin-bottom:8px"></div>
+      <div class="tw"><table><thead><tr><th id="th-sel"><input type="checkbox" id="todos" title="Marcar todos los de esta lista"></th><th>Cédula</th><th>Trabajador</th><th>Sede</th><th>Situación en Personal</th><th>Situación en Beneficios</th><th>Familiares</th><th>Qué se hace en Beneficios</th></tr></thead><tbody id="tb"></tbody></table></div>
+      <p class="muted" style="margin-top:8px">Personal manda: esta pantalla solo cambia Beneficios para que coincida con Personal, nunca al revés. Cada cambio queda anotado en los movimientos de Beneficios como "Conciliación".</p>
+    </section>
+  </div>
+</main>
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+import { getFirestore, collection, getDocs, doc, writeBatch, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+const app=initializeApp({apiKey:"AIzaSyBJiS_a9CVKXXvWPZ85e4iBmDpFijM7y6Q",authDomain:"beneficio-pimiii-hcm-utiles.firebaseapp.com",projectId:"beneficio-pimiii-hcm-utiles",storageBucket:"beneficio-pimiii-hcm-utiles.firebasestorage.app",messagingSenderId:"691905699172",appId:"1:691905699172:web:b68e8be7947135e7abae71"});
+const auth=getAuth(app), db=getFirestore(app);
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/\s+/g,' ').trim();
+const NOMBRES_GH={'ruthsaraisilvamogollon@gmail.com':'Ruth Saraís M.','mariateresasaggiogarcia34@gmail.com':'María Teresa G.','computadoramaryoris12@gmail.com':'Maryoris Saraí C.'};
+const quien=()=>{const e=String(auth.currentUser?.email||'').toLowerCase();return NOMBRES_GH[e]||e||'Sistema';};
+const hoy=()=>{const d=new Date();d.setMinutes(d.getMinutes()-d.getTimezoneOffset());return d.toISOString().slice(0,10);};
+const FUERA_P={'Egresado':1,'Suspendido':1,'Contrato culminado':1};
+const fueraB=e=>e==='Egresado'||e==='Suspendido';
+
+const CAT={
+  sacar:{t:'Fuera en Personal, siguen en Beneficios',k:'Egresados o suspendidos en Personal que en Beneficios están de otra forma',accion:true,
+    aviso:'Están egresados, con contrato culminado o suspendidos en Personal, pero en Beneficios siguen activos (o con otra situación). Mientras no se corrijan, ellos y su grupo familiar cuentan como asegurables. Marque los que quiere corregir y pulse "Aplicar en Beneficios".'},
+  reinc:{t:'Activos en Personal, fuera en Beneficios',k:'Activos en Personal y egresados o suspendidos en Beneficios',accion:true,
+    aviso:'Están activos en Personal pero egresados o suspendidos en Beneficios. Revise cada caso antes de aplicar: si el egreso de Beneficios es el correcto, lo que hay que corregir es Personal.'},
+  falta:{t:'En Personal, no están en Beneficios',k:'Activos en Personal que no existen en Beneficios',accion:true,
+    aviso:'Están activos en Personal y no existen en Beneficios. Al aplicar se crean en Beneficios con sus datos de Personal y sin familiares; el grupo familiar se carga luego desde su ficha en Beneficios.'},
+  soloBen:{t:'En Beneficios, no están en Personal',k:'Activos en Beneficios que no existen en Personal',accion:false,
+    aviso:'Están activos en Beneficios y su cédula no aparece en Personal. Puede ser una cédula mal escrita en uno de los dos sistemas o alguien que falta cargar en Personal. Solo es para revisar: aquí no se aplica nada.'}
+};
+let FILAS=[], cat='sacar', SEL=new Set();
+
+$('#entrar').onclick=()=>signInWithEmailAndPassword(auth,$('#correo').value.trim(),$('#clave').value).catch(()=>{$('#err').textContent='Correo o contraseña incorrectos.';});
+$('#clave').onkeydown=e=>{if(e.key==='Enter')$('#entrar').click();};
+$('#salir').onclick=()=>signOut(auth);
+let cargado=false;
+onAuthStateChanged(auth,u=>{
+  $('#p-login').classList.toggle('oculto',!!u);$('#p-app').classList.toggle('oculto',!u);$('#usr').classList.toggle('oculto',!u);
+  if(u){$('#quien').textContent=u.email;if(!cargado){cargado=true;cargar();}}
+});
+
+const sede=w=>{const u=norm(w.ubicacion);if(u.includes('ISIDORA'))return 'Mina Isidora';if(u.includes('CHOCO'))return 'Planta Chocó';return norm(w.gerencia).includes('ISIDORA')?'Mina Isidora':'Planta Chocó';};
+const sedeB=t=>norm(t.ubic).includes('ISIDORA')?'Mina Isidora':'Planta Chocó';
+const ubicBen=d=>{const u=norm(d.ubicacion),g=norm(d.gerencia);return (u.includes('ISIDORA')||(!u&&g.includes('ISIDORA')))?'MINA ISIDORA':'PLANTA CHOCO';};
+const sexoBen=s=>{s=norm(s);return s[0]==='F'?'F':s[0]==='M'?'M':'';};
+
+async function cargar(){
+  $('#conteo').textContent='Cargando Personal y Beneficios...';
+  try{
+    const [p,b]=await Promise.all([getDocs(collection(db,'personal')),getDocs(collection(db,'trabajadores'))]);
+    const P={},B={};
+    p.docs.forEach(d=>P[d.id]=d.data());
+    b.docs.forEach(d=>B[d.id]=d.data());
+    FILAS=[];
+    Object.keys(P).forEach(c=>{
+      const w=P[c],eP=w.estado||'Activo',t=B[c];
+      const nom=(String(w.apellidos||'').trim()+', '+String(w.nombres||'').trim()).toUpperCase();
+      if(FUERA_P[eP]){
+        if(!t)return;
+        const destino=eP==='Suspendido'?'Suspendido':'Egresado', eB=t.est||'Activo';
+        if(eB!==destino)FILAS.push({c,cat:'sacar',nom,sede:sede(w),eP,eB,fam:(t.fam||[]).length,destino,tipo:destino==='Egresado'?'Egreso':'Suspensión',t,w});
+      }else{
+        if(!t){FILAS.push({c,cat:'falta',nom,sede:sede(w),eP,eB:'—',fam:0,destino:'Activo',tipo:'Ingreso',t:null,w});return;}
+        const eB=t.est||'Activo';
+        if(fueraB(eB))FILAS.push({c,cat:'reinc',nom,sede:sede(w),eP,eB,fam:(t.fam||[]).length,destino:'Activo',tipo:'Reincorporación',t,w});
+      }
+    });
+    Object.keys(B).forEach(c=>{
+      const t=B[c],eB=t.est||'Activo';
+      if(!P[c]&&!fueraB(eB))FILAS.push({c,cat:'soloBen',nom:t.nom||'',sede:sedeB(t),eP:'—',eB,fam:(t.fam||[]).length,destino:'',tipo:'',t,w:null});
+    });
+    FILAS.sort((a,b)=>a.nom.localeCompare(b.nom,'es'));
+    const primera=['sacar','reinc','falta','soloBen'].find(k=>FILAS.some(f=>f.cat===k));
+    cat=primera||'sacar';
+    pintar();
+  }catch(e){$('#conteo').innerHTML='<span class="err">No se pudo cargar: '+esc(e.message)+'</span>';}
+}
+
+function lista(){const q=norm($('#q').value);return FILAS.filter(f=>f.cat===cat&&(!q||f.c.includes(q.replace(/\D/g,'')||'#')||norm(f.nom).includes(q)));}
+function queHace(f){
+  if(f.cat==='sacar')return 'Pasa a '+f.destino+' ('+f.tipo.toLowerCase()+')';
+  if(f.cat==='reinc')return 'Pasa a Activo (reincorporación)';
+  if(f.cat==='falta')return 'Se crea en Beneficios (ingreso)';
+  return 'Revisar la cédula en ambos sistemas';
+}
+const pillE=e=>e==='—'?'<span class="pill p-sin">No está</span>':'<span class="pill '+(FUERA_P[e]||fueraB(e)?'p-fue':'p-ok')+'">'+esc(e)+'</span>';
+
+function pintar(){
+  $('#kpis').innerHTML=Object.keys(CAT).map(k=>{const n=FILAS.filter(f=>f.cat===k).length;return `<div class="kpi${k===cat?' act':''}" data-k="${k}"><div class="l">${esc(CAT[k].t)}</div><div class="v">${n}</div></div>`;}).join('');
+  document.querySelectorAll('.kpi').forEach(d=>d.onclick=()=>{cat=d.dataset.k;SEL.clear();pintar();});
+  const C=CAT[cat],L=lista();
+  $('#titulo').textContent=C.t;
+  $('#aviso').textContent=C.aviso;
+  $('#th-sel').style.display=C.accion?'':'none';
+  $('#aplicar').style.display=C.accion?'':'none';
+  $('#conteo').textContent=L.length?L.length+' trabajador(es) en esta lista.':'';
+  $('#tb').innerHTML=L.length?L.map(f=>`<tr>${C.accion?`<td><input type="checkbox" class="sel" data-c="${f.c}"${SEL.has(f.c)?' checked':''}></td>`:''}<td>${f.c}</td><td>${esc(f.nom)}</td><td>${esc(f.sede)}</td><td>${pillE(f.eP)}</td><td>${pillE(f.eB)}</td><td>${f.cat==='falta'?'—':f.fam}</td><td>${esc(queHace(f))}</td></tr>`).join('')
+    :`<tr><td colspan="8" class="muted" style="padding:14px">${FILAS.some(f=>f.cat===cat)?'Ningún trabajador coincide con la búsqueda.':'Todo coincide: no hay trabajadores en esta lista.'}</td></tr>`;
+  document.querySelectorAll('.sel').forEach(x=>x.onchange=()=>{x.checked?SEL.add(x.dataset.c):SEL.delete(x.dataset.c);botones();});
+  $('#todos').checked=L.length>0&&L.every(f=>SEL.has(f.c));
+  botones();
+}
+function botones(){const n=lista().filter(f=>SEL.has(f.c)).length;$('#aplicar').disabled=!n;$('#aplicar').textContent=n?'Aplicar en Beneficios ('+n+')':'Aplicar en Beneficios';}
+$('#q').oninput=pintar;
+$('#todos').onchange=e=>{lista().forEach(f=>e.target.checked?SEL.add(f.c):SEL.delete(f.c));pintar();};
+
+$('#aplicar').onclick=async()=>{
+  const L=lista().filter(f=>SEL.has(f.c));
+  if(!L.length)return;
+  if(!confirm('Se van a aplicar '+L.length+' cambio(s) en Beneficios para que coincidan con Personal.\n\nCada cambio queda anotado en los movimientos de Beneficios. ¿Continuar?'))return;
+  const btn=$('#aplicar');btn.disabled=true;btn.textContent='Aplicando...';
+  const fecha=hoy(),por=quien();
+  try{
+    for(let i=0;i<L.length;i+=200){
+      const lote=writeBatch(db);
+      L.slice(i,i+200).forEach(f=>{
+        const ref=doc(db,'trabajadores',f.c),movRef=doc(collection(db,'movimientos'));
+        const motivo='Conciliación con Personal (en Personal: '+f.eP+')';
+        if(f.cat==='falta'){
+          const d=f.w;
+          lote.set(ref,{ced:f.c,nom:f.nom,cargo:String(d.cargo||'').toUpperCase(),ger:String(d.gerencia||'').toUpperCase(),coord:String(d.coordinacion||'').toUpperCase(),
+            ubic:ubicBen(d),nomina:d.tipoNomina||'',est:'Activo',fing:d.fechaIngreso||fecha,tel:d.telefono||'',dir:String(d.direccion||'').toUpperCase(),
+            fnac:d.fechaNacimiento||null,sexo:sexoBen(d.sexo),fam:[],actualizado:serverTimestamp()});
+          lote.set(movRef,{ced:f.c,nom:f.nom,tipo:'Ingreso',antes:'—',despues:'Activo',fecha,motivo,origen:'Conciliación',registradoPor:por});
+        }else{
+          lote.set(ref,{est:f.destino,actualizado:serverTimestamp()},{merge:true});
+          lote.set(movRef,{ced:f.c,nom:f.t.nom||f.nom,tipo:f.tipo,antes:f.eB,despues:f.destino,fecha,motivo,origen:'Conciliación',registradoPor:por});
+        }
+      });
+      await lote.commit();
+    }
+    const hechos=new Set(L.map(f=>f.c));
+    FILAS=FILAS.filter(f=>!(f.cat===cat&&hechos.has(f.c)));
+    SEL.clear();pintar();
+    alert('Listo: '+L.length+' trabajador(es) corregidos en Beneficios.');
+  }catch(e){
+    alert('No se pudo terminar: '+e.message+'\n\nRecargue la página para ver qué quedó aplicado.');
+    botones();
+  }
+};
+
+$('#xls').onclick=()=>{
+  const L=lista();
+  if(!L.length){alert('No hay trabajadores en esta lista.');return;}
+  const rows=[['Cédula','Trabajador','Sede','Situación en Personal','Situación en Beneficios','Familiares','Qué se hace en Beneficios']]
+    .concat(L.map(f=>[f.c,f.nom,f.sede,f.eP,f.eB,f.cat==='falta'?'':f.fam,queHace(f)]));
+  const ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=[{wch:12},{wch:40},{wch:14},{wch:20},{wch:20},{wch:10},{wch:36}];
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Conciliación');
+  XLSX.writeFile(wb,'Conciliacion_Personal_Beneficios_'+hoy()+'.xlsx');
+};
+</script>
+</body>
+</html>

@@ -213,7 +213,7 @@ const FIREBASE_CONFIG = {
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
   from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
-import { getFirestore, collection, doc, getDocs, setDoc, deleteDoc, addDoc,
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, deleteDoc, addDoc,
          query, orderBy, limit, serverTimestamp, writeBatch }
   from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
@@ -242,9 +242,17 @@ export const DB = {
     };
   },
 
-  guardarTrabajador(t){
+  /* La situación (est) solo se escribe en un movimiento: así una edición hecha con la
+     pantalla abierta desde antes no deshace un egreso o una suspensión cargados en Personal. */
+  guardarTrabajador(t,conEst){
     const {_k,...limpio}=t;
-    return setDoc(doc(db,'trabajadores',t.ced),{...limpio,actualizado:serverTimestamp()});
+    if(!conEst) delete limpio.est;
+    return setDoc(doc(db,'trabajadores',t.ced),{...limpio,actualizado:serverTimestamp()},{merge:true});
+  },
+  /* ¿La cédula está en Personal? Los movimientos de los que sí están se registran allá. */
+  async enPersonal(ced){
+    const s=await getDoc(doc(db,'personal',String(ced)));
+    return s.exists()?s.data():null;
   },
   borrarTrabajador:ced=>deleteDoc(doc(db,'trabajadores',ced)),
 
@@ -331,7 +339,7 @@ const asegurables=t=>1+t.fam.filter(f=>!f.apoyo).length;
 function movimiento(t,tipo,estado,fecha,motivo){
   const antes=t.est; t.est=estado;
   const m={ced:t.ced,nom:t.nom,tipo,antes,despues:estado,fecha:fecha||hoyISO(),motivo:motivo||''};
-  MOV.unshift(m); guardar(t);
+  MOV.unshift(m); guardar(t,true);
   DB.guardarMovimiento(m).then(id=>m._id=id).catch(avisoError);
 }
 const hoyISO=()=>new Date().toISOString().slice(0,10);
@@ -646,11 +654,11 @@ function vMovimientos(){
   const L=q?DATA.filter(t=>t._k.includes(q)).slice(0,40):[];
   main(`
   <div class="head"><div><h1>Movimientos de personal</h1>
-    <p class="sub">Registre el ingreso de un trabajador nuevo, o el egreso, la suspensión y la reincorporación de uno existente. El movimiento entra o saca a la persona y a su grupo familiar de la base de asegurables.</p></div></div>
+    <p class="sub">El ingreso, el egreso, la suspensión y la reincorporación se registran en <a href="personal.html">Personal</a> y se aplican aquí solos: el trabajador y su grupo familiar entran o salen de la base de asegurables. Aquí solo se registran los de quienes no están en Personal.</p></div></div>
 
   <div class="dl" style="margin-bottom:20px">
     <article><h3>Registrar ingreso</h3>
-      <p>Da de alta un trabajador nuevo. Después se le agrega el grupo familiar desde su ficha.</p>
+      <p>Solo para quien no está en Personal. Los ingresos de Personal llegan aquí solos; después se le agrega el grupo familiar desde su ficha.</p>
       <button class="btn pri" id="ab-ing">Registrar ingreso</button></article>
     <article><h3>Egreso o suspensión</h3>
       <p>Busque al trabajador abajo y registre el movimiento. Sale de asegurables pero no se borra.</p></article>
@@ -702,7 +710,11 @@ function vMovimientos(){
   <tbody>${MOV.map((m,i)=>`<tr><td>${fdate(m.fecha)}</td><td>${m.ced}</td><td>${esc(m.nom)}</td>
     <td><span class="tag ${m.tipo==='Ingreso'?'g':m.tipo==='Reincorporación'?'p':'b'}">${m.tipo}</span></td>
     <td>${m.antes}</td><td>${m.despues}</td>
-    <td><button class="btn an" data-i="${i}" style="padding:3px 8px;font-size:12px">Anular</button></td>
+    <td>${m.origen==='Personal'
+      ?'<span class="tag" title="Cargado en Personal. Para corregirlo, registre el movimiento contrario en Personal.">Desde Personal</span>'
+      :m.origen==='Conciliación'
+      ?'<span class="tag" title="Aplicado desde la pantalla de conciliación con Personal.">Conciliación</span>'
+      :`<button class="btn an" data-i="${i}" style="padding:3px 8px;font-size:12px">Anular</button>`}</td>
     </tr>`).join('')}</tbody></table>`
   :'<div class="empty">Todavía no ha registrado movimientos en esta sesión.</div>'}`);
 
@@ -712,9 +724,18 @@ function vMovimientos(){
   $('#no-ing').onclick=()=>$('#form-ing').classList.add('hide');
   $('#ok-ing').onclick=guardarIngreso;
   $$('.an').forEach(b=>b.onclick=()=>anular(+b.dataset.i));
-  $$('.mv').forEach(b=>b.onclick=()=>{
+  $$('.mv').forEach(b=>b.onclick=async()=>{
     const t=DATA.find(x=>x.ced===b.dataset.c), e=b.dataset.e;
     const tipo=e==='Activo'?'Reincorporación':e==='Egresado'?'Egreso':'Suspensión';
+    b.disabled=true;
+    let P=null;
+    try{ P=await DB.enPersonal(t.ced); }
+    catch(err){ b.disabled=false; alert('No se pudo verificar si el trabajador está en Personal. Revise la conexión e intente de nuevo.'); return; }
+    if(P){
+      b.disabled=false;
+      alert(t.nom+' está en Personal (situación allá: '+(P.estado||'Activo')+').\n\nLa '+tipo.toLowerCase()+' se registra en Personal y se aplica aquí sola. Si ya la registró allá, recargue esta página.');
+      return;
+    }
     movimiento(t,tipo,e); const v=$('#q').value; vMovimientos(); $('#q').value=v;
   });
 }
@@ -729,11 +750,19 @@ function guardarIngreso(){
   const ced=g('i-ced').replace(/\D/g,''), nom=g('i-nom').toUpperCase();
   if(!ced||!nom){$('#err-ing').textContent='Hacen falta la cédula y el nombre.';return;}
   if(DATA.some(t=>t.ced===ced)){$('#err-ing').textContent='Esa cédula ya está en la base.';return;}
+  if(!guardarIngreso._ok){
+    $('#err-ing').textContent='Verificando en Personal…';
+    DB.enPersonal(ced).then(P=>{
+      if(P){ $('#err-ing').innerHTML='Esa cédula está en Personal. Su ingreso se aplica aquí solo; si no aparece, agréguelo desde la <a href="conciliar.html">conciliación con Personal</a>.'; return; }
+      guardarIngreso._ok=true; try{ guardarIngreso(); } finally { guardarIngreso._ok=false; }
+    }).catch(()=>{ $('#err-ing').textContent='No se pudo verificar si la cédula está en Personal. Revise la conexión.'; });
+    return;
+  }
   const t={ced,nom,cargo:g('i-cargo').toUpperCase(),ger:g('i-ger').toUpperCase(),
     coord:g('i-coord').toUpperCase(),ubic:g('i-ubic'),nomina:g('i-nom2'),est:'Activo',
     fing:g('i-fing')||hoyISO(),tel:g('i-tel'),dir:g('i-dir').toUpperCase(),
     fnac:g('i-fnac')||null,sexo:g('i-sexo'),fam:[]};
-  t._k=clave(t); DATA.push(t); guardar(t);
+  t._k=clave(t); DATA.push(t); guardar(t,true);
   const m={ced,nom,tipo:'Ingreso',antes:'—',despues:'Activo',fecha:t.fing,motivo:''};
   MOV.unshift(m); DB.guardarMovimiento(m).then(id=>m._id=id).catch(avisoError);
   $('#q').value=ced; vMovimientos(); $('#q').value=ced;
@@ -899,7 +928,7 @@ function anular(i){
   if(m.tipo==='Ingreso'){
     const k=DATA.indexOf(t); if(k>=0) DATA.splice(k,1);
     DB.borrarTrabajador(m.ced).catch(avisoError);
-  } else if(t){ t.est=m.antes; guardar(t); }
+  } else if(t){ t.est=m.antes; guardar(t,true); }
   if(m._id) DB.borrarMovimiento(m._id).catch(avisoError);
   MOV.splice(i,1); render();
 }
@@ -970,7 +999,7 @@ function marcaGuardado(p){
   p.then(()=>{ if(--GUARDANDO===0) estado('Cambios guardados','ok'); })
    .catch(e=>{ GUARDANDO--; avisoError(e); });
 }
-const guardar      = t => marcaGuardado(DB.guardarTrabajador(t));
+const guardar      = (t,conEst) => marcaGuardado(DB.guardarTrabajador(t,conEst));
 const guardarApoyo = a => marcaGuardado(DB.guardarApoyo(a).then(id=>{ if(!a._id) a._id=id; }));
 
 let tJor=null;

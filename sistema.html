@@ -83,6 +83,11 @@ td{padding:5px 6px;border-bottom:1px solid #EDF0F3}
         <p>Cargo según función frente al cargo de la nómina en bolívares, para la regularización. Con descarga en Excel.</p>
         <span class="estado u">Reporte</span>
       </a>
+      <a class="mod" href="conciliar.html" style="--c:var(--rojo)">
+        <h3>Conciliación Personal y Beneficios</h3>
+        <p>Trabajadores egresados, suspendidos o nuevos en Personal cuya situación no coincide en Beneficios, para corregirlos.</p>
+        <span class="estado u">Revisión</span>
+      </a>
     </div>
 
     <section class="panel">
@@ -135,7 +140,10 @@ async function buscar(){
     const cargoN=NB?NB.cargo:[...new Set(V.map(r=>r.g).filter(Boolean))].join(' / ');
     const cargoF=P?.cargo||'';
     const reg=cargoN&&(norm(cargoN)==='CONTRATADO'||(cargoF&&!cargoN.split(' / ').some(x=>norm(x)===norm(cargoF))));
-    out.innerHTML=`<h3 style="margin:16px 0 0;font-size:17px">${esc(nombre)} <span style="color:var(--gris);font-weight:normal;font-size:14px">C.I. ${c}</span> ${reg?'<span class="pill">Cargo por regularizar</span>':''}</h3>
+    const eP=P?(P.estado||'Activo'):'', eB=B?(B.est||'Activo'):'';
+    const fueraP=eP==='Egresado'||eP==='Suspendido'||eP==='Contrato culminado', fueraB=eB==='Egresado'||eB==='Suspendido';
+    const difSit=P&&B&&(fueraP?eB!==(eP==='Suspendido'?'Suspendido':'Egresado'):fueraB);
+    out.innerHTML=`<h3 style="margin:16px 0 0;font-size:17px">${esc(nombre)} <span style="color:var(--gris);font-weight:normal;font-size:14px">C.I. ${c}</span> ${reg?'<span class="pill">Cargo por regularizar</span>':''} ${difSit?'<a class="pill" href="conciliar.html" style="background:#FCEBEB;color:var(--rojo);text-decoration:none" title="Corregir en la conciliación">Situación distinta en Beneficios</a>':''}</h3>
     <div class="exp">
       <div class="caja" style="--c:var(--per)"><h4>Personal</h4>${P?d('Cargo según función',P.cargo)+d('Gerencia',P.gerencia)+d('Coordinación',P.coordinacion)+d('Ubicación',P.ubicacion)+d('Ingreso',fd(P.fechaIngreso))+d('Tipo de nómina',P.tipoNomina)+d('Estado',P.estado||'Activo')+CM.map(x=>d('Comisión de servicio',x.tipo+' · '+x.ente+' · hasta '+(x.sinFin?'nuevo aviso':fd(x.hasta)))).join(''):'<p class="vacio">No está en Personal.</p>'}</div>
       <div class="caja" style="--c:var(--vac)"><h4>Vacaciones</h4>${NB?d('Cargo de nómina (Bs)',NB.cargo)+d('Tipo de nómina (Bs)',NB.tipo)+d('Ingreso (nómina)',NB.ing):''}${V.length?(NB?'':d('Cargo de nómina (Bs)',cargoN))+(NB?'':d('Ingreso (nómina)',V[0].i))+d('Sede',V[0].u)+

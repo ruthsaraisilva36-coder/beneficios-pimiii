@@ -61,12 +61,90 @@ firebase.initializeApp({apiKey:"AIzaSyBJiS_a9CVKXXvWPZ85e4iBmDpFijM7y6Q",authDom
     lote.set(ref, anidar(p.slice(2), limpia(valor)), {merge:true});
   }
   function anidar(ps, v){ var o = {}, cur = o; ps.forEach(function(k, i){ if(i === ps.length-1) cur[k] = v; else { cur[k] = {}; cur = cur[k]; } }); return o; }
+  /* -- Enlace con Beneficios --------------------------------------------
+     El ingreso, el egreso, la culminacion de contrato, la suspension y la
+     reincorporacion se registran solo aqui, en Personal, y se aplican solos en
+     Beneficios (coleccion trabajadores) en la misma operacion, dejando el
+     movimiento anotado en la bitacora de Beneficios con origen "Personal". */
+  var FUERA_P = { 'Egresado':1, 'Suspendido':1, 'Contrato culminado':1 };
+  var NOMBRES_GH = { 'ruthsaraisilvamogollon@gmail.com':'Ruth Saraís M.', 'mariateresasaggiogarcia34@gmail.com':'María Teresa G.', 'computadoramaryoris12@gmail.com':'Maryoris Saraí C.' };
+  function quienBen(){ var u = firebase.auth().currentUser, e = u ? String(u.email||'').toLowerCase() : ''; return NOMBRES_GH[e] || e || 'Sistema'; }
+  function hoyBen(){ var d = new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,10); }
+  function ubicBen(d){
+    var u = String(d.ubicacion||'').toUpperCase(), g = String(d.gerencia||'').toUpperCase();
+    if(u.indexOf('ISIDORA') >= 0) return 'MINA ISIDORA';
+    if(!u && g.indexOf('ISIDORA') >= 0) return 'MINA ISIDORA';
+    return 'PLANTA CHOCO';
+  }
+  function sexoBen(s){ s = String(s||'').toUpperCase(); return s.charAt(0)==='F' ? 'F' : (s.charAt(0)==='M' ? 'M' : ''); }
+  // Lee de las rutas que se van a guardar qué trabajadores cambian de situación
+  function cambiosEstado(base, obj){
+    var r = {};
+    Object.keys(obj).forEach(function(k){
+      var p = partes(base ? base+'/'+k : k), v = obj[k];
+      if(p[0] === 'personal' && p[1]){
+        var c = r[p[1]] || (r[p[1]] = {});
+        if(p.length === 2 && v && typeof v === 'object'){ c.datos = v; if(v.estado) c.estado = v.estado; }
+        else if(p.length === 3 && p[2] === 'estado' && typeof v === 'string') c.estado = v;
+        else if(p.length === 3 && p[2] === 'ultimoMovFecha' && v) c.fecha = v;
+      }
+      if(p[0] === 'movimientos' && p.length === 2 && v && v.cedula){ (r[v.cedula] || (r[v.cedula] = {})).mov = v; }
+    });
+    Object.keys(r).forEach(function(c){ if(!r[c].estado) delete r[c]; });
+    return r;
+  }
+  // Agrega al mismo lote los cambios de Beneficios (solo escribe si todas las lecturas salieron bien)
+  function enlazarBeneficios(lote, cambios){
+    var ceds = Object.keys(cambios);
+    if(!ceds.length) return Promise.resolve([]);
+    return Promise.all(ceds.map(function(c){ return fs.collection('trabajadores').doc(c).get(); })).then(function(snaps){
+      var hechos = [];
+      snaps.forEach(function(s, i){
+        var c = ceds[i], x = cambios[c], est = x.estado, m = x.mov || {};
+        var fecha = x.fecha || m.fecha || (x.datos && x.datos.fechaIngreso) || hoyBen();
+        var motivo = [est === 'Contrato culminado' ? 'Culminación de contrato' : '', m.detalle || ''].filter(Boolean).join(' — ');
+        var ref = fs.collection('trabajadores').doc(c), movRef = fs.collection('movimientos').doc();
+        var comun = { ced:c, fecha:fecha, motivo:motivo, origen:'Personal', registradoPor:quienBen() };
+        if(s.exists){
+          var t = s.data(), antes = t.est || 'Activo', antesFuera = (antes === 'Egresado' || antes === 'Suspendido');
+          var nuevo = null, tipo = '';
+          if(FUERA_P[est]){ nuevo = (est === 'Suspendido') ? 'Suspendido' : 'Egresado'; tipo = (nuevo === 'Suspendido') ? 'Suspensión' : 'Egreso'; }
+          else if(est === 'Activo' && antesFuera){ nuevo = 'Activo'; tipo = 'Reincorporación'; }
+          if(!nuevo || nuevo === antes) return;
+          lote.set(ref, { est:nuevo, actualizado:FV.serverTimestamp() }, { merge:true });
+          lote.set(movRef, Object.assign({ nom:t.nom||'', tipo:tipo, antes:antes, despues:nuevo }, comun));
+          hechos.push(tipo+': '+(t.nom||c));
+        } else if(est === 'Activo' && x.datos){
+          var d = x.datos, nom = (String(d.apellidos||'').trim()+', '+String(d.nombres||'').trim()).toUpperCase();
+          lote.set(ref, { ced:c, nom:nom, cargo:String(d.cargo||'').toUpperCase(), ger:String(d.gerencia||'').toUpperCase(),
+            coord:String(d.coordinacion||'').toUpperCase(), ubic:ubicBen(d), nomina:d.tipoNomina||'', est:'Activo',
+            fing:d.fechaIngreso||fecha, tel:d.telefono||'', dir:String(d.direccion||'').toUpperCase(),
+            fnac:d.fechaNacimiento||null, sexo:sexoBen(d.sexo), fam:[], actualizado:FV.serverTimestamp() });
+          lote.set(movRef, Object.assign({ nom:nom, tipo:'Ingreso', antes:'—', despues:'Activo' }, comun));
+          hechos.push('Ingreso: '+nom);
+        }
+      });
+      return hechos;
+    });
+  }
+  function confirmarLote(lote, cambios){
+    return enlazarBeneficios(lote, cambios).catch(function(e){ console.warn('Enlace con Beneficios:', e); return null; })
+      .then(function(hechos){
+        return lote.commit().then(function(){
+          if(hechos === null) alert('El movimiento quedó guardado en Personal, pero no se pudo aplicar en Beneficios (falla de conexión).\nRevísalo en la pantalla "Conciliación Personal y Beneficios" del menú.');
+        });
+      });
+  }
   Ref.prototype.update = function(obj){
     var base = this.p.join('/'), lote = fs.batch();
     Object.keys(obj).forEach(function(k){ aplicar(lote, base ? base+'/'+k : k, obj[k]); });
-    return lote.commit();
+    return confirmarLote(lote, cambiosEstado(base, obj));
   };
-  Ref.prototype.set = function(v){ var lote = fs.batch(); aplicar(lote, this.p.join('/'), v); return lote.commit(); };
+  Ref.prototype.set = function(v){
+    var ruta = this.p.join('/'), lote = fs.batch(), o = {}; o[ruta] = v;
+    aplicar(lote, ruta, v);
+    return confirmarLote(lote, cambiosEstado('', o));
+  };
   Ref.prototype.remove = function(){ var lote = fs.batch(); aplicar(lote, this.p.join('/'), null); return lote.commit(); };
   window.db = { ref:function(p){ return new Ref(p); } };
 })();
