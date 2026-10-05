@@ -1340,7 +1340,13 @@ function esDiaHabil(date) {
 // Último período ≥ 2019 → PUNTO DE CUENTA CVM: 30 días hábiles
 // Días hábiles = excluye sábados, domingos y feriados venezolanos
 function calcularDiasVacaciones(record) {
-  let ultimoPeriodo = parseInt(record.up) || 0;
+  // El calculo va sobre el periodo QUE SE VA A DISFRUTAR, no sobre el ya disfrutado.
+  // Si hay periodo pendiente guardado (pp) se usa ese; si no, el siguiente al ultimo disfrutado (up + 1).
+  let ultimoPeriodo = 0;
+  const _mPP = String(record.pp || '').match(/\d{4}/);
+  const _upGuardado = parseInt(record.up) || 0;
+  if (_mPP) ultimoPeriodo = parseInt(_mPP[0]);
+  else if (_upGuardado > 0) ultimoPeriodo = _upGuardado + 1;
   const fechaIngreso = record.i; // formato dd/mm/yyyy
 
   // Parsear año de ingreso
@@ -1374,14 +1380,14 @@ function calcularDiasVacaciones(record) {
     return {
       dias: totalDias,
       base: 'LOT',
-      detalle: `15 + ${diasAdicionales} (${anosServicio} años serv.) = ${totalDias} días hábiles`
+      detalle: `Período ${ultimoPeriodo}-${ultimoPeriodo+1}: 15 + ${diasAdicionales} (${anosServicio} años serv.) = ${totalDias} días hábiles`
     };
   } else {
     // PUNTO DE CUENTA CVM: 30 días hábiles fijos
     return {
       dias: 30,
       base: 'P/C CVM',
-      detalle: '30 días hábiles (Punto de Cuenta CVM)'
+      detalle: 'Período ' + ultimoPeriodo + '-' + (ultimoPeriodo+1) + ': 30 días hábiles (Punto de Cuenta CVM)'
     };
   }
 }
@@ -1537,8 +1543,10 @@ function renderVacaciones() {
       const regsConPP = regsDelTrab.filter(x => x.pp && x.pp.trim());
       let upRef;
       if (regsConPP.length > 0) {
+        // up guarda el ANO DE INICIO del ultimo periodo disfrutado,
+        // asi que el primer periodo pendiente arranca en up + 1
         const minUpConPP = Math.min(...regsConPP.map(x => parseInt(x.up)));
-        upRef = minUpConPP;
+        upRef = minUpConPP + 1;
       } else {
         upRef = Math.max(...regsDelTrab.map(x => parseInt(x.up))) + 1;
       }
@@ -1764,11 +1772,20 @@ function buscarTrabajador() {
     _diasCalculados = calc.dias;
     _baseCalculada = calc.base;
     // Determinar periodo: usar up del registro, o el calculado por calcularDiasVacaciones
-    const upVal = parseInt(found.up) || (found._upCalc || 0);
+    const upGuardado = parseInt(found.up) || 0;
     // Periodo solicitado (el que se va a disfrutar)
     let periodoSolicitado = '';
-    if (upVal > 0) {
-      periodoSolicitado = upVal + '-' + (upVal+1);
+    if (found.pp && found.pp.trim()) {
+      // El periodo a solicitar es el PERIODO PENDIENTE guardado en la data
+      periodoSolicitado = found.pp.trim();
+    } else if (upGuardado > 0) {
+      // Si no hay periodo pendiente guardado, es el siguiente al ultimo disfrutado
+      periodoSolicitado = (upGuardado + 1) + '-' + (upGuardado + 2);
+    } else if (parseInt(found._upCalc) > 0) {
+      // Sin periodo registrado: se usa el estimado desde la fecha de ingreso
+      periodoSolicitado = found._upCalc + '-' + (parseInt(found._upCalc) + 1);
+    }
+    if (periodoSolicitado) {
       document.getElementById('sol-periodo').value = periodoSolicitado;
     }
     // Periodo pendiente: SIEMPRE es el periodo SIGUIENTE al solicitado
