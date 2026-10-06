@@ -710,6 +710,7 @@ body.viewer-mode .admin-only { display: none !important; }
         <button class="btn btn-outline btn-sm" onclick="generarReporteReposos()">Generar Reporte</button>
         <button class="btn btn-outline btn-sm" onclick="exportReposos()">Descargar Excel</button>
         <button class="btn btn-primary btn-sm" onclick="document.getElementById('import-reposos-file').click()" style="background:#548235;">Importar Reposos Excel</button>
+        <button class="btn btn-outline btn-sm" onclick="depurarReposos()" style="border-color:#B3261E;color:#B3261E;">Depurar reposos</button>
         <input type="file" id="import-reposos-file" accept=".xlsx,.xls" style="display:none" onchange="importReposos(this)">
       </div>
     </div>
@@ -1076,6 +1077,78 @@ function saveVacacionesData() {
 // Cada solicitud o reposo guardado aquí se refleja en Personal: queda como movimiento en el historial del trabajador
 // y, en el caso de vacaciones, cambia su estado a "Vacaciones" el día que empiezan.
 const _NOMBRES_GH = { 'ruthsaraisilvamogollon@gmail.com': 'Ruth Saraís M.', 'mariateresasaggiogarcia34@gmail.com': 'María Teresa G.', 'computadoramaryoris12@gmail.com': 'Maryoris Saraí C.' };
+
+// ══════════════ FECHAS A PRUEBA DE DATOS DAÑADOS ══════════════
+// Devuelve {d,m,y} con y=null si el año es ilegible. Acepta yyyy-mm-dd,
+// dd/mm/aaaa, dd/mm/aa, ddmm/aaaa, el número de serie de Excel y los
+// valores con el prefijo "undefined/undefined/".
+function _repPartes(v) {
+  if (v === null || v === undefined) return null;
+  let s = String(v).trim();
+  if (!s || s === 'undefined' || s === 'null') return null;
+  s = s.replace(/^(?:undefined[\/\-])+/i, '').replace(/[\/\-]{2,}/g, '/').trim();
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) return { d:+m[3], m:+m[2], y:+m[1] };
+  if (/^\d{5}$/.test(s)) {                       // número de serie de Excel
+    const dt = new Date(Date.UTC(1899, 11, 30) + (+s) * 86400000);
+    return { d: dt.getUTCDate(), m: dt.getUTCMonth() + 1, y: dt.getUTCFullYear() };
+  }
+  m = s.match(/^(\d{2})(\d{2})[\/\-](\d{2,4})$/); // día y mes pegados
+  if (m) s = m[1] + '/' + m[2] + '/' + m[3];
+  m = s.match(/^(\d{1,2})[\/\-](\d{1,3})[\/\-](\d{1,5})$/);
+  if (!m) return null;
+  let d = +m[1], mes = +m[2];
+  if (mes > 12) { const t = m[2]; mes = (+t.slice(0,2) >= 1 && +t.slice(0,2) <= 12) ? +t.slice(0,2) : +t.slice(0,1); }
+  if (!(d >= 1 && d <= 31 && mes >= 1 && mes <= 12)) return null;
+  const ys = m[3];
+  let y = null;
+  if (ys.length === 4) y = +ys;
+  else if (ys.length === 2) y = 2000 + (+ys);
+  if (y !== null && (y < 1990 || y > 2100)) y = null;   // 2006, 2028, 206, 216...
+  return { d, m: mes, y };
+}
+function _repIso(v) {
+  const p = _repPartes(v);
+  if (!p || p.y === null) return '';
+  return p.y + '-' + String(p.m).padStart(2,'0') + '-' + String(p.d).padStart(2,'0');
+}
+// dd/mm/aaaa seguro: nunca produce "undefined"
+function _repFmt(v) {
+  const i = _repIso(v);
+  if (i) { const p = i.split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
+  const q = _repPartes(v);
+  if (q) return String(q.d).padStart(2,'0') + '/' + String(q.m).padStart(2,'0') + '/????';
+  return v ? String(v) : '';
+}
+// Repara el par desde/hasta de un reposo. Devuelve {desde,hasta,cambio}
+function _repArreglarFechas(r) {
+  const pd = _repPartes(r.desde), ph = _repPartes(r.hasta);
+  const dias = parseInt(String(r.dias || '').replace(/\D/g,'')) || null;
+  // Si los dos años se contradicen, se descarta el que esté más lejos del año
+  // en que se registró el reposo y se reconstruye con el campo Tiempo.
+  const ref = (_repPartes(r.fecha) || {}).y || new Date().getFullYear();
+  if (pd && ph && pd.y && ph.y && Math.abs(pd.y - ph.y) > 1) {
+    if (Math.abs(pd.y - ref) > Math.abs(ph.y - ref)) pd.y = null; else ph.y = null;
+  }
+  let by = ph && ph.y;
+  if (pd && pd.y === null) pd.y = by || ref || null;
+  if (ph && ph.y === null) ph.y = (pd && pd.y) || ref || null;
+  const iso = p => (p && p.y) ? p.y + '-' + String(p.m).padStart(2,'0') + '-' + String(p.d).padStart(2,'0') : '';
+  let desde = iso(pd), hasta = iso(ph);
+  const sumar = (i, n) => { const t = new Date(i + 'T00:00:00'); t.setDate(t.getDate() + n); return t.toISOString().slice(0,10); };
+  if (desde && !hasta && dias) hasta = sumar(desde, dias - 1);
+  if (hasta && !desde && dias) desde = sumar(hasta, -(dias - 1));
+  if (desde && hasta && hasta < desde) { if (dias) desde = sumar(hasta, -(dias - 1)); else { const t = desde; desde = hasta; hasta = t; } }
+  // Año disparatado (2006, 2028...): la diferencia no se parece al campo Tiempo
+  if (desde && hasta && dias) {
+    const span = Math.round((new Date(hasta + 'T00:00:00') - new Date(desde + 'T00:00:00')) / 86400000) + 1;
+    if (Math.abs(span - dias) > 60) desde = sumar(hasta, -(dias - 1));
+  }
+  const cambio = desde !== (r.desde || '') || hasta !== (r.hasta || '');
+  return { desde, hasta, cambio, completo: !!(desde && hasta) };
+}
+const _repClave = r => String(r.cedula || '').replace(/\D/g,'') + '|' + (r.desde || '') + '|' + (r.hasta || '');
+
 function _isoFecha(f) { const d = parseFechaFlexible(f); if (!d) return ''; const m = String(d.getMonth() + 1).padStart(2, '0'), dd = String(d.getDate()).padStart(2, '0'); return d.getFullYear() + '-' + m + '-' + dd; }
 function _hoyIso() { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); }
 function _fmt(iso) { if (!iso) return ''; const p = iso.split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
@@ -2168,7 +2241,7 @@ function limpiarSolicitud() {
 
 function previsualizarSolicitud() {
   const body = document.getElementById('modal-preview-body');
-  const fmt = d => { if (!d) return '___/___/______'; const p = d.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; };
+  const fmt = d => { if (!d) return '___/___/______'; return _repFmt(d) || '___/___/______'; };
   const v = id => { const el = document.getElementById(id); return el ? (el.value || '').trim() : ''; };
 
   // Observaciones auto-generadas como en los formularios reales del Excel
@@ -2604,11 +2677,7 @@ function renderReposos() {
     return t || '';
   };
 
-  const fmtDate = (d) => {
-    if (!d) return '';
-    const p = d.split('-');
-    return p[2]+'/'+p[1]+'/'+p[0];
-  };
+  const fmtDate = (d) => _repFmt(d);
 
   tbody.innerHTML = filtered.map((r, i) => `<tr>
     <td>${i+1}</td>
@@ -2676,7 +2745,7 @@ function generarReporteReposos() {
     return true;
   });
 
-  const fmtDate = (d) => { if (!d) return ''; const p = d.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; };
+  const fmtDate = (d) => _repFmt(d);
 
   let rows = filtered.map((r, i) => `<tr>
     <td style="text-align:center;">${i+1}</td>
@@ -2877,6 +2946,56 @@ function cambiarEstadoReposo(id) {
   renderReposos();
 }
 
+
+// ══════════════ DEPURAR REPOSOS ══════════════
+// Arregla las fechas dañadas y elimina los reposos repetidos (misma cédula,
+// mismo desde y mismo hasta). Conserva el que está convalidado.
+function depurarReposos() {
+  const arregladas = [], sinFecha = [];
+  const copia = reposos.map(r => {
+    const f = _repArreglarFechas(r);
+    if (f.cambio && f.completo) { arregladas.push([r, r.desde, r.hasta, f.desde, f.hasta]); return { ...r, desde: f.desde, hasta: f.hasta }; }
+    if (!f.completo) sinFecha.push(r);
+    return r;
+  });
+  const grupos = new Map();
+  copia.forEach(r => { const k = _repClave(r); if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(r); });
+  const finales = [], sobran = [];
+  grupos.forEach(g => {
+    if (g.length === 1) { finales.push(g[0]); return; }
+    const conv = g.find(x => String(x.convalidado || '').toUpperCase() === 'SI');
+    const queda = conv || g[0];
+    finales.push(queda);
+    g.forEach(x => { if (x !== queda) sobran.push(x); });
+  });
+  if (!arregladas.length && !sobran.length) {
+    alert('No hay nada que depurar: ninguna fecha dañada y ningún reposo repetido.');
+    return;
+  }
+  const muestra = arregladas.slice(0, 5).map(([r, d0, h0, d1, h1]) =>
+    '  ' + r.cedula + ' ' + (r.nombre || '').slice(0, 24) + ': ' + (d0 || '—') + ' → ' + d1).join('\n');
+  const txt =
+    'DEPURACIÓN DE REPOSOS\n\n' +
+    'Reposos actuales: ' + reposos.length + '\n' +
+    'Fechas que se corrigen: ' + arregladas.length + '\n' +
+    'Repetidos que se eliminan: ' + sobran.length + '\n' +
+    (sinFecha.length ? 'Sin fecha legible (se dejan como están): ' + sinFecha.length + '\n' : '') +
+    'Quedan: ' + finales.length + '\n\n' +
+    (muestra ? 'Ejemplos de corrección:\n' + muestra + '\n\n' : '') +
+    'Esto no se puede deshacer. Descargue el Excel antes de continuar.\n\n¿Continuar?';
+  if (!confirm(txt)) return;
+  if (!confirm('Confirme otra vez: se eliminarán ' + sobran.length + ' reposos repetidos y quedarán ' + finales.length + '.')) return;
+  reposos = finales;
+  saveData();
+  renderReposos();
+  renderHistorial();
+  renderDashboard();
+  alert('Listo.\n\nFechas corregidas: ' + arregladas.length +
+        '\nRepetidos eliminados: ' + sobran.length +
+        '\nReposos en el sistema: ' + reposos.length +
+        (sinFecha.length ? '\n\nQuedan ' + sinFecha.length + ' sin fecha legible: corríjalos a mano.' : ''));
+}
+
 // ══════════════ IMPORTAR REPOSOS MASIVO ══════════════
 function importReposos(input) {
   const file = input.files[0];
@@ -2919,18 +3038,13 @@ function importReposos(input) {
 
       function parseDate(val) {
         if (!val) return '';
-        if (val instanceof Date) return val.toISOString().split('T')[0];
-        if (typeof val === 'number') {
-          const d = new Date((val - 25569) * 86400000);
-          return d.toISOString().split('T')[0];
+        if (val instanceof Date) {
+          const t = new Date(val.getTime() - val.getTimezoneOffset() * 60000);
+          return t.toISOString().slice(0,10);
         }
-        const s = String(val).trim();
-        // dd/mm/yyyy o dd-mm-yyyy
-        const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-        if (m) return m[3] + '-' + m[2].padStart(2,'0') + '-' + m[1].padStart(2,'0');
-        // yyyy-mm-dd
-        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-        return s;
+        // _repIso entiende dd/mm/aaaa, dd/mm/aa, aaaa-mm-dd y el serial de Excel.
+        // Si la fecha no se puede leer devuelve '' en vez de guardar basura.
+        return _repIso(val);
       }
 
       function parseTpr(val) {
@@ -2942,7 +3056,8 @@ function importReposos(input) {
         return v || 'E';
       }
 
-      let count = 0;
+      let count = 0, repetidos = 0, malas = 0;
+      const yaHay = new Set(reposos.map(_repClave));
       const dataRows = rows.slice(1).filter(r => r[colMap.cedula]);
 
       for (const r of dataRows) {
@@ -2965,11 +3080,17 @@ function importReposos(input) {
           estado: colMap.estado >= 0 ? String(r[colMap.estado] || 'ACTIVO').toUpperCase() : 'FINALIZADO'
         };
         if (!rep.cedula || !rep.nombre) continue;
+        // La fecha no se pudo leer: no se guarda basura en la base
+        if (!rep.desde || !rep.hasta) { malas++; continue; }
         // Calcular días si no viene en el Excel
         if (!rep.dias && rep.desde && rep.hasta) {
           const d1 = new Date(rep.desde), d2 = new Date(rep.hasta);
           if (!isNaN(d1) && !isNaN(d2)) rep.dias = String(Math.round((d2 - d1) / 86400000) + 1);
         }
+        // Ya existe un reposo de esa cédula con las mismas fechas: no se duplica
+        const k = _repClave(rep);
+        if (yaHay.has(k)) { repetidos++; continue; }
+        yaHay.add(k);
         reposos.push(rep);
         count++;
       }
@@ -2978,7 +3099,9 @@ function importReposos(input) {
       renderReposos();
       renderHistorial();
       renderDashboard();
-      alert(count + ' reposos importados correctamente.');
+      alert(count + ' reposos importados.' +
+        (repetidos ? '\n' + repetidos + ' no se cargaron porque ya estaban registrados (misma cédula y mismas fechas).' : '') +
+        (malas ? '\n' + malas + ' no se cargaron porque la fecha no se pudo leer.' : ''));
     } catch(err) {
       alert('Error al leer el archivo: ' + err.message);
       console.error(err);
@@ -3178,7 +3301,7 @@ function exportReposos() {
     if (mesFilter && r.desde && !r.desde.startsWith(mesFilter)) return false;
     return true;
   });
-  const fmtD = d => { if (!d) return ''; const p = d.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; };
+  const fmtD = d => _repFmt(d);
   const headers = ['N°','C.I.','Nombres y Apellidos','Unidad de Adscripción','Desde','Hasta','Tiempo','TPR','Diagnóstico','Emitido Por','Opera','Convalidado','Observaciones'];
   const rows = filtered.map((r, i) => [
     i+1, r.cedula, r.nombre, r.unidad||'', fmtD(r.desde), fmtD(r.hasta), r.dias, r.tpr||'E', r.diagnostico||'', r.emitidoPor||'', r.ubicacion, r.convalidado||'', r.obs||''
